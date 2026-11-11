@@ -1,0 +1,23 @@
+{
+  "clean_run_id": "492bef9d-74a6-4f51-9298-a46f7b35b300",
+  "schema_version": 2,
+  "charts": [
+    "01_yearly_growth.png",
+    "02_field_trends.png",
+    "03_top_categories.png",
+    "04_heatmap.png",
+    "05_keyword_trends.png",
+    "06_wordclouds.png",
+    "07_field_distribution.png",
+    "08_author_collaboration_trend.png",
+    "09_top_authors.png",
+    "10_validated_trend.png",
+    "11_field_radar_comparison.png",
+    "12_lda_topic_bubble.png"
+  ],
+  "years": [
+    2007,
+    2016
+  ],
+  "scope": "downloaded_shards_only_not_a_representative_sample"
+}

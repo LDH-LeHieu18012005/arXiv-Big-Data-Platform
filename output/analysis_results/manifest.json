@@ -1,0 +1,60 @@
+{
+  "schema_version": 2,
+  "clean_run_id": "492bef9d-74a6-4f51-9298-a46f7b35b300",
+  "generated_at": "2026-11-11T14:45:56.626573+00:00",
+  "rows": 704329,
+  "min_year": 2007,
+  "max_year": 2016,
+  "groups": 8,
+  "spark_version": "3.5.3",
+  "spark_master": "local[*]",
+  "scope": "downloaded_shards_only_not_a_representative_sample",
+  "year_definition": "first_arxiv_submission",
+  "timings_seconds": {
+    "yearly_growth": 2.916352999999617,
+    "field_trends": 3.304507100000592,
+    "top_categories_yearly": 1.0819498999999269,
+    "hot_keyword_trends": 110.12662590000036,
+    "field_metrics": 2.6643339000002015,
+    "group_terms": 9.677838800000245,
+    "top_terms": 5.559343300000364,
+    "top_authors": 8.253288599999905,
+    "author_trends": 1.2026942000002236
+  },
+  "preprocessing_seconds": 129.90323179999996,
+  "model": {
+    "status": "trained",
+    "k": 10,
+    "vocabulary_size": 10000,
+    "train_documents": 200181,
+    "train_available": 563273,
+    "test_documents": 50013,
+    "test_available": 141056,
+    "test_log_perplexity": 7.761927004285452,
+    "seconds": 280.18492249999963
+  },
+  "source": {
+    "repo": "VatsaDev/test_arxiv",
+    "revision": "adef1f1e891574774660683f0f4548e50f5d551f",
+    "revision_ref": "refs/convert/parquet",
+    "selected_at": "2026-11-11",
+    "shards": [
+      {
+        "path": "default/train/0000.parquet",
+        "local_name": "0000.parquet",
+        "bytes": 283355969,
+        "sha256": "99922809dfa2e73b95277f7359c4f2a32c5fce1d7fae549feb8319ccabb073df"
+      },
+      {
+        "path": "default/train/0001.parquet",
+        "local_name": "0001.parquet",
+        "bytes": 286042960,
+        "sha256": "7d3f5349ddfb8edb141846f3d3447081f39dc356a86c199e1a9b94d756aae1cc"
+      }
+    ],
+    "total_bytes": 569398929,
+    "scope": "downloaded_shards_only",
+    "note": "Hai shard đầu tiên; không đại diện toàn bộ arXiv."
+  },
+  "total_analysis_seconds": 464.69017040000017
+}

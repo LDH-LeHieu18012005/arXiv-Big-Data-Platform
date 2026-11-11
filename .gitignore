@@ -1,0 +1,39 @@
+# Python virtual environment
+.venv/
+
+# Python cache & compiled files
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Backup & Log files
+*.bak
+*.log
+*.tmp
+*.swp
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Spark checksum files
+*.crc
+._SUCCESS.crc
+
+# Raw dataset parquet files (exceeds GitHub 100MB file limit)
+data/arxiv_clean.parquet/
+data/arxiv_data.parquet/
+
+# Keep data manifests
+!data/source_manifest.json
+!data/clean_manifest.json
+
+# Large MLlib model artifacts
+output/analysis_results/idf_model/
+output/analysis_results/lda_model/
+output/analysis_results/vocabulary_model/

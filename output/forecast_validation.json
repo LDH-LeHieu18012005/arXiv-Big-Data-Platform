@@ -1,0 +1,59 @@
+{
+  "clean_run_id": "492bef9d-74a6-4f51-9298-a46f7b35b300",
+  "scope": "downloaded_subset_only",
+  "method": "linear_trend_three_year_holdout_vs_last_value",
+  "metrics": [
+    {
+      "word": "transformer",
+      "status": "accepted",
+      "train_end_year": 2012,
+      "test_years": [
+        2013,
+        2014,
+        2015
+      ],
+      "mae": 0.06943601374659161,
+      "baseline_mae": 0.09145344310011004,
+      "unit": "papers_per_1000"
+    },
+    {
+      "word": "attention",
+      "status": "accepted",
+      "train_end_year": 2012,
+      "test_years": [
+        2013,
+        2014,
+        2015
+      ],
+      "mae": 0.4179784595100878,
+      "baseline_mae": 1.8772530821233506,
+      "unit": "papers_per_1000"
+    },
+    {
+      "word": "diffusion",
+      "status": "accepted",
+      "train_end_year": 2012,
+      "test_years": [
+        2013,
+        2014,
+        2015
+      ],
+      "mae": 0.23666977212278675,
+      "baseline_mae": 0.9098637951217619,
+      "unit": "papers_per_1000"
+    },
+    {
+      "word": "quantum",
+      "status": "accepted",
+      "train_end_year": 2012,
+      "test_years": [
+        2013,
+        2014,
+        2015
+      ],
+      "mae": 0.8125510104915984,
+      "baseline_mae": 4.02888911788131,
+      "unit": "papers_per_1000"
+    }
+  ]
+}

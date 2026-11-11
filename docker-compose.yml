@@ -1,0 +1,271 @@
+###############################################################################
+#  BIG DATA PIPELINE: Kafka → Spark Streaming → HDFS → Hive → Dashboard
+#  Cụm phân tán: 12 Docker Containers
+###############################################################################
+
+services:
+
+  # ===========================================================================
+  #  HADOOP HDFS  (Lưu trữ phân tán)
+  # ===========================================================================
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    ports:
+      - "9870:9870"       # HDFS NameNode Web UI
+      - "9000:9000"       # HDFS RPC
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=bigdata-cluster
+    env_file:
+      - ./config/hadoop.env
+    restart: unless-stopped
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    ports:
+      - "9864:9864"       # DataNode Web UI
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./config/hadoop.env
+    depends_on:
+      - namenode
+    restart: unless-stopped
+
+  # ===========================================================================
+  #  APACHE KAFKA  (Message Broker)
+  # ===========================================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    ports:
+      - "9092:9092"       # Kafka External Listener
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:29092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    depends_on:
+      - zookeeper
+    restart: unless-stopped
+
+  # ===========================================================================
+  #  APACHE HIVE  (SQL Data Warehouse trên HDFS)
+  # ===========================================================================
+  hive-metastore-postgresql:
+    image: bde2020/hive-metastore-postgresql:2.3.0
+    container_name: hive-metastore-postgresql
+    volumes:
+      - hive_postgresql:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-metastore
+    command: /opt/hive/bin/hive --service metastore
+    ports:
+      - "9083:9083"       # Thrift Metastore
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 hive-metastore-postgresql:5432"
+    env_file:
+      - ./config/hadoop.env
+    depends_on:
+      - namenode
+      - datanode
+      - hive-metastore-postgresql
+    restart: unless-stopped
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-server
+    ports:
+      - "10000:10000"     # HiveServer2 Thrift (JDBC/ODBC)
+      - "10002:10002"     # HiveServer2 Web UI
+    environment:
+      SERVICE_PRECONDITION: "hive-metastore:9083"
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: "jdbc:postgresql://hive-metastore-postgresql/metastore"
+    env_file:
+      - ./config/hadoop.env
+    depends_on:
+      - hive-metastore
+    restart: unless-stopped
+
+  # ===========================================================================
+  #  APACHE SPARK CLUSTER  (Xử lý phân tán)
+  # ===========================================================================
+  spark-master:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bigdata-spark:latest
+    container_name: spark-master
+    command: /usr/local/spark/bin/spark-class org.apache.spark.deploy.master.Master -h spark-master -p 7077 --webui-port 8080
+    ports:
+      - "8080:8080"       # Spark Master Web UI
+      - "7077:7077"       # Spark Master RPC
+    volumes:
+      - ./data:/home/jovyan/work/data
+      - ./output:/home/jovyan/work/output
+      - ./src:/home/jovyan/work/src
+    environment:
+      - SPARK_MASTER_HOST=spark-master
+    restart: unless-stopped
+
+  spark-worker-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bigdata-spark:latest
+    container_name: spark-worker-1
+    command: /usr/local/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077 --webui-port 8081 -c 2 -m 2G --work-dir /tmp/spark-work
+    ports:
+      - "8081:8081"       # Worker 1 Web UI
+    depends_on:
+      - spark-master
+    volumes:
+      - ./data:/home/jovyan/work/data
+      - ./output:/home/jovyan/work/output
+      - ./src:/home/jovyan/work/src
+    restart: unless-stopped
+
+  spark-worker-2:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bigdata-spark:latest
+    container_name: spark-worker-2
+    command: /usr/local/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077 --webui-port 8082 -c 2 -m 2G --work-dir /tmp/spark-work
+    ports:
+      - "8082:8082"       # Worker 2 Web UI (profile "full")
+    depends_on:
+      - spark-master
+    volumes:
+      - ./data:/home/jovyan/work/data
+      - ./output:/home/jovyan/work/output
+      - ./src:/home/jovyan/work/src
+    restart: unless-stopped
+
+  spark-jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bigdata-spark:latest
+    container_name: spark-jupyter
+    command: start-notebook.sh --IdentityProvider.token='bigdata2026' --ServerApp.root_dir='/home/jovyan/work'
+    ports:
+      - "8888:8888"       # JupyterLab
+      - "4040:4040"       # Spark Driver UI
+    volumes:
+      - ./data:/home/jovyan/work/data
+      - ./notebooks:/home/jovyan/work/notebooks
+      - ./tests:/home/jovyan/work/tests
+      - ./scripts:/home/jovyan/work/scripts
+      - ./output:/home/jovyan/work/output
+      - ./src:/home/jovyan/work/src
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_DRIVER_MEMORY=2g
+      - SPARK_DRIVER_HOST=spark-jupyter
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_TOPIC=arxiv-papers-v2
+    depends_on:
+      - spark-master
+      - kafka
+      - namenode
+    restart: unless-stopped
+
+  # ===========================================================================
+  #  STREAMLIT DASHBOARD  (Giao diện trực quan)
+  # ===========================================================================
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: dashboard
+    ports:
+      - "8501:8501"       # Streamlit Dashboard
+    volumes:
+      - ./src:/app/src
+      - ./output:/app/output
+      - ./data:/app/data
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_TOPIC=arxiv-papers-v2
+      - HIVE_HOST=hive-server
+      - HIVE_PORT=10000
+      - HDFS_NAMENODE=hdfs://namenode:9000
+    depends_on:
+      - kafka
+      - hive-server
+      - namenode
+    restart: unless-stopped
+
+  streaming-consumer:
+    profiles: ["streaming"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bigdata-spark:latest
+    container_name: streaming-consumer
+    command: python /home/jovyan/work/src/spark_streaming_consumer.py
+    volumes:
+      - ./src:/home/jovyan/work/src
+      - ./output:/home/jovyan/work/output
+      - spark_ivy:/home/jovyan/.ivy2
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_DRIVER_HOST=streaming-consumer
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_TOPIC=arxiv-papers-v2
+    depends_on:
+      kafka:
+        condition: service_healthy
+      spark-worker-1:
+        condition: service_started
+      datanode:
+        condition: service_started
+    restart: on-failure
+
+# ===========================================================================
+#  PERSISTENT VOLUMES
+# ===========================================================================
+volumes:
+  kafka_data:
+  zookeeper_data:
+  zookeeper_log:
+  spark_ivy:
+  hadoop_namenode:
+    driver: local
+  hadoop_datanode:
+    driver: local
+  hive_postgresql:
+    driver: local
