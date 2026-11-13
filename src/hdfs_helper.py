@@ -55,7 +55,7 @@ def list_hdfs_dir(path: str = "/data") -> List[Dict[str, Any]]:
             data = json.loads(resp.read().decode("utf-8"))
             return data.get("FileStatuses", {}).get("FileStatus", [])
     except Exception as e:
-        print(f"⚠️ Không thể đọc danh sách HDFS tại {path}: {e}")
+        print(f"[WARN] Khong the doc danh sach HDFS tai {path}: {e}")
         return []
 
 

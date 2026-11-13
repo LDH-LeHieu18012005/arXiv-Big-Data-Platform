@@ -251,7 +251,7 @@ if __name__ == "__main__":
             print(preprocess(spark))
         if args.stage in ("analyze", "all"):
             print(analyze(spark, train_topics=not args.skip_topics))
-        if args.stage == "sync-hdfs":
+        if args.stage in ("sync-hdfs", "all"):
             print(sync_hdfs(spark))
     finally:
         spark.stop()

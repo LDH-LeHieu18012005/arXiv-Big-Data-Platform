@@ -123,21 +123,34 @@ output/
     author_trends.parquet
     topics.json
   charts/                     # 12 biểu đồ PNG + manifest.json
+  screenshots/                # ảnh dashboard dùng trong báo cáo
   forecast_validation.json    # MAE holdout so với baseline
   forecast_predictions.json   # chỉ chứa từ khóa được chấp nhận
   reports/
-    BAO_CAO_BAI_TAP_LON_BIGDATA.docx / .md
-    SLIDE_THUYET_TRINH_BIGDATA.pptx
+    BAO_CAO_BAI_TAP_LON_BIGDATA.docx / .pdf
+    pages_report.json         # số trang thật của từng hình/bảng do Word trả về
+    SLIDE_THUYET_TRINH_BIGDATA.pptx / .pdf
 ```
 
 Sinh lại báo cáo và slide:
 
 ```bash
-python scripts/build_data_mining_style_report.py
+# Slide: dừng lại nếu mã lần chạy giữa dữ liệu sạch, kết quả phân tích và biểu đồ không khớp.
 python scripts/build_presentation_slides.py
+python scripts/export_slides_pdf.py output/reports/SLIDE_THUYET_TRINH_BIGDATA.pptx
+
+# Báo cáo: dựng từ template, sau đó để Word cập nhật mục lục và trả về số trang thật.
+python scripts/build_arxiv_report.py
+python scripts/update_report_fields.py output/reports/BAO_CAO_BAI_TAP_LON_BIGDATA.docx output/reports/pages_report.json
+python scripts/build_arxiv_report.py output/reports/pages_report.json
+python scripts/update_report_fields.py output/reports/BAO_CAO_BAI_TAP_LON_BIGDATA.docx output/reports/pages_report.json output/reports/BAO_CAO_BAI_TAP_LON_BIGDATA.pdf
 ```
 
-Hai script này dừng lại nếu mã lần chạy giữa dữ liệu sạch, kết quả phân tích và biểu đồ không khớp.
+Hai lần dựng báo cáo là cần thiết: lần đầu chưa biết số trang của hình/bảng, Word tính bố cục và ghi
+số trang vào `pages_report.json`, lần hai điền các số đó vào danh mục hình vẽ/bảng rồi mới xuất PDF.
+Nếu chạy lại vòng dựng – cập nhật, kiểm tra `pages_report.json` không đổi trước khi xuất bản cuối.
+Mẫu bố cục nằm tại `templates/report_template.docx` (chỉ giữ style, header và khổ trang; toàn bộ nội
+dung được sinh lại từ pipeline).
 
 ## Kiểm thử
 

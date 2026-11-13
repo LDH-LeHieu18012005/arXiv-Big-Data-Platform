@@ -5,6 +5,7 @@ Kiến trúc phân tán: Kafka → Spark Streaming → HDFS Lakehouse → Hive D
 ================================================================================
 """
 import json
+import base64
 import os
 import socket
 import sys
@@ -36,220 +37,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom High-End CSS Styling
-CUSTOM_CSS = """
-<style>
-/* Modern Fonts & Base Styles */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+# Theme: light tech-blue design system (single source of truth).
+THEME_CSS = (Path(__file__).with_name("dashboard_theme.css")).read_text(encoding="utf-8")
+st.markdown(f"<style>{THEME_CSS}</style>", unsafe_allow_html=True)
 
-html, body, [class*="css"] {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-/* Header Gradient Banner */
-.hero-banner {
-    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
-    border: 1px solid rgba(99, 102, 241, 0.25);
-    border-radius: 16px;
-    padding: 24px 32px;
-    margin-bottom: 24px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
-}
-
-.hero-title {
-    font-size: 2.1rem;
-    font-weight: 800;
-    background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 6px;
-}
-
-.hero-subtitle {
-    color: #94a3b8;
-    font-size: 1.0rem;
-    font-weight: 400;
-    margin-bottom: 16px;
-}
-
-.badge-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-}
-
-.tech-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(30, 41, 59, 0.8);
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    color: #e2e8f0;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 500;
-    backdrop-filter: blur(4px);
-}
-
-.tech-badge.spark { border-color: rgba(249, 115, 22, 0.4); color: #fb923c; }
-.tech-badge.kafka { border-color: rgba(6, 182, 212, 0.4); color: #22d3ee; }
-.tech-badge.hdfs { border-color: rgba(234, 179, 8, 0.4); color: #facc15; }
-.tech-badge.hive { border-color: rgba(168, 85, 247, 0.4); color: #c084fc; }
-.tech-badge.streamlit { border-color: rgba(244, 63, 94, 0.4); color: #fb7185; }
-
-/* Metric KPI Cards */
-.kpi-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.kpi-card {
-    background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
-    border: 1px solid rgba(148, 163, 184, 0.15);
-    border-radius: 14px;
-    padding: 18px 20px;
-    transition: all 0.25s ease;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-}
-
-.kpi-card:hover {
-    transform: translateY(-3px);
-    border-color: rgba(99, 102, 241, 0.4);
-    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.15);
-}
-
-.kpi-label {
-    font-size: 0.82rem;
-    font-weight: 500;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 6px;
-}
-
-.kpi-value {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: #f8fafc;
-    line-height: 1.2;
-}
-
-.kpi-desc {
-    font-size: 0.78rem;
-    color: #38bdf8;
-    margin-top: 6px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-/* Status Indicators */
-.status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
-    border-radius: 30px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    margin-bottom: 8px;
-}
-
-.status-online {
-    background: rgba(16, 185, 129, 0.15);
-    border: 1px solid rgba(16, 185, 129, 0.35);
-    color: #34d399;
-}
-
-.status-offline {
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.35);
-    color: #f87171;
-}
-
-.dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-}
-
-.dot.green { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
-.dot.red { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
-
-/* Section Header */
-.section-title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #f1f5f9;
-    margin-top: 8px;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border-bottom: 2px solid rgba(99, 102, 241, 0.2);
-    padding-bottom: 8px;
-}
-
-/* Gallery Cards */
-.gallery-card {
-    background: #1e293b;
-    border: 1px solid rgba(148, 163, 184, 0.15);
-    border-radius: 12px;
-    padding: 12px;
-    margin-bottom: 16px;
-    transition: all 0.2s ease;
-}
-
-.gallery-card:hover {
-    border-color: rgba(56, 189, 248, 0.5);
-    box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.3);
-}
-
-.gallery-title {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #f8fafc;
-    margin-bottom: 6px;
-}
-
-.gallery-caption {
-    font-size: 0.8rem;
-    color: #94a3b8;
-    line-height: 1.4;
-}
-
-/* Sidebar Styling */
-[data-testid="stSidebar"] {
-    background: #0b0f19;
-    border-right: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-/* Tab Active Styles */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-}
-
-.stTabs [data-baseweb="tab"] {
-    padding: 10px 20px;
-    font-weight: 600;
-    border-radius: 8px 8px 0 0;
-    color: #94a3b8;
-}
-
-.stTabs [aria-selected="true"] {
-    color: #38bdf8 !important;
-    background: rgba(56, 189, 248, 0.08) !important;
-    border-bottom: 3px solid #38bdf8 !important;
-}
-</style>
-"""
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+LOGO_PATH = Path(__file__).with_name("assets") / "cogailab_logo.svg"
+if LOGO_PATH.exists():
+    LOGO_B64 = base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
+    LOGO_IMG = (
+        f'<img src="data:image/svg+xml;base64,{LOGO_B64}" '
+        'alt="CogAI Lab" style="width:100%;height:auto;display:block;"/>'
+    )
+else:
+    LOGO_IMG = ""
 
 # -----------------------------------------------------------------------------
 # 2. APP STATE & CONFIG
@@ -271,382 +71,349 @@ def tcp_status(host, port, timeout=2.0):
 
 
 kafka_host, _, kafka_port = kafka_server.partition(":")
-kafka_ok = tcp_status(kafka_host or "localhost", kafka_port or 9092)
-spark_ok = tcp_status(os.getenv("SPARK_MASTER_HOST", "spark-master"), 7077)
+kafka_port = kafka_port or "9092"
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def get_cluster_status():
+    """Check the four service boundaries, cached briefly to keep reruns fast."""
+    return {
+        "kafka": tcp_status(kafka_host or "localhost", kafka_port),
+        "spark": tcp_status(os.getenv("SPARK_MASTER_HOST", "spark-master"), 7077),
+        "hdfs": check_hdfs_status().get("status") == "ONLINE",
+        "hive": test_hive_connection()[0],
+    }
+
+
+cluster = get_cluster_status()
+kafka_ok = cluster["kafka"]
+spark_ok = cluster["spark"]
+hdfs_is_online = cluster["hdfs"]
+hive_ok = cluster["hive"]
+online_count = sum(1 for value in cluster.values() if value)
+
+
+def status_row(name, port, ok):
+    state = "on" if ok else "off"
+    label = "ONLINE" if ok else "OFFLINE"
+    return (
+        f'<div class="status-row"><span class="status-dot {state}"></span>'
+        f'<span class="status-name">{name}</span><span class="status-port">{port}</span>'
+        f'<span class="status-badge {state}">{label}</span></div>'
+    )
+
 
 # -----------------------------------------------------------------------------
-# 3. SIDEBAR: CLUSTER HEALTH & QUICK ACCESS
+# 3. SIDEBAR: BRAND & SERVICE HEALTH
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 🌌 arXiv Big Data Studio")
-    st.caption("Cụm phân tán · 11 dịch vụ mặc định")
+    st.markdown(f'<div class="brand-logo">{LOGO_IMG}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand-sub">arXiv Big Data Demo</div>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown("#### ⚡ Giám sát Cụm Dịch vụ")
+    st.markdown('<div class="side-label">Trạng thái dịch vụ</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="status-panel">'
+        + status_row("Kafka", "9092", kafka_ok)
+        + status_row("HDFS", "9870", hdfs_is_online)
+        + status_row("Hive", "10000", hive_ok)
+        + status_row("Spark", "7077", spark_ok)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+    st.caption(f"{online_count}/4 dịch vụ đang online")
+    if st.button("Làm mới trạng thái", use_container_width=True, key="refresh_status"):
+        get_cluster_status.clear()
+        st.rerun()
 
-    kafka_class = "status-online" if kafka_ok else "status-offline"
-    kafka_dot = "green" if kafka_ok else "red"
-    kafka_text = "ONLINE" if kafka_ok else "OFFLINE"
-    st.markdown(f"""
-    <div style="background: rgba(30,41,59,0.7); padding: 10px 14px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(148,163,184,0.15);">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 600; font-size: 0.85rem; color: #e2e8f0;">Apache Kafka</span>
-            <span class="status-pill {kafka_class}" style="padding: 2px 8px; font-size: 0.72rem;"><span class="dot {kafka_dot}"></span> {kafka_text}</span>
-        </div>
-        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">Broker: <code>{kafka_server}</code></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Check HDFS status
-    hdfs_info = check_hdfs_status()
-    hdfs_is_online = (hdfs_info.get("status") == "ONLINE")
-    hdfs_class = "status-online" if hdfs_is_online else "status-offline"
-    hdfs_dot = "green" if hdfs_is_online else "red"
-    hdfs_status_text = "ONLINE" if hdfs_is_online else "OFFLINE"
-    st.markdown(f"""
-    <div style="background: rgba(30,41,59,0.7); padding: 10px 14px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(148,163,184,0.15);">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 600; font-size: 0.85rem; color: #e2e8f0;">Hadoop HDFS</span>
-            <span class="status-pill {hdfs_class}" style="padding: 2px 8px; font-size: 0.72rem;"><span class="dot {hdfs_dot}"></span> {hdfs_status_text}</span>
-        </div>
-        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">NameNode: <code>hdfs://namenode:9000</code></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Check Hive status
-    hive_ok, hive_msg = test_hive_connection()
-    hive_class = "status-online" if hive_ok else "status-offline"
-    hive_dot = "green" if hive_ok else "red"
-    hive_status_text = "ONLINE" if hive_ok else "DISCONNECTED"
-    st.markdown(f"""
-    <div style="background: rgba(30,41,59,0.7); padding: 10px 14px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(148,163,184,0.15);">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 600; font-size: 0.85rem; color: #e2e8f0;">Apache Hive</span>
-            <span class="status-pill {hive_class}" style="padding: 2px 8px; font-size: 0.72rem;"><span class="dot {hive_dot}"></span> {hive_status_text}</span>
-        </div>
-        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">Thrift: <code>Port 10000 (arxiv_db)</code></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Check Spark status
-    spark_class = "status-online" if spark_ok else "status-offline"
-    spark_dot = "green" if spark_ok else "red"
-    spark_text = "ONLINE" if spark_ok else "OFFLINE"
-    st.markdown(f"""
-    <div style="background: rgba(30,41,59,0.7); padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; border: 1px solid rgba(148,163,184,0.15);">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 600; font-size: 0.85rem; color: #e2e8f0;">Apache Spark</span>
-            <span class="status-pill {spark_class}" style="padding: 2px 8px; font-size: 0.72rem;"><span class="dot {spark_dot}"></span> {spark_text}</span>
-        </div>
-        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">Master: <code>spark-master:7077</code> · 2 workers / 4 cores</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("#### 🔗 Cổng dịch vụ Web UI")
-    col_l1, col_l2 = st.columns(2)
-    with col_l1:
-        st.link_button("⚡ Spark UI", "http://localhost:8080", use_container_width=True)
-        st.link_button("🐘 HDFS UI", "http://localhost:9870", use_container_width=True)
-    with col_l2:
-        st.link_button("📓 JupyterLab", "http://localhost:8888", use_container_width=True)
-        st.link_button("🏛️ Hive Web", "http://localhost:10002", use_container_width=True)
-
-    st.markdown("---")
+    st.markdown('<div class="side-label">Luồng dữ liệu</div>', unsafe_allow_html=True)
     st.markdown("""
-    <div style="font-size: 0.75rem; color: #64748b; line-height: 1.5;">
-        <b>Tài nguyên cụm:</b><br/>
-        • 12 Docker Containers<br/>
-        • Spark: 1 Master, 2 Workers (4 Cores, 4GB RAM)<br/>
-        • Hadoop HDFS (1 NameNode, 1 DataNode)<br/>
-        • Hive Metastore + PostgreSQL Backend<br/>
-        • Kafka 7.6.0 + Zookeeper
+    <div class="flow-mini">
+        <span>Kafka</span>
+        <i>↓</i>
+        <span>Spark Streaming</span>
+        <i>↓</i>
+        <span>HDFS</span>
+        <i>↓</i>
+        <span>Hive</span>
+        <i>↓</i>
+        <span>Dashboard</span>
     </div>
     """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 4. TOP HERO BANNER
+# 4. HERO: BRAND, TITLE & STACK
 # -----------------------------------------------------------------------------
-st.markdown("""
-<div class="hero-banner">
-    <div class="hero-title">🌌 Nền Tảng Phân Tích Dữ Liệu Lớn arXiv</div>
-    <div class="hero-subtitle">
-        Khám phá xu hướng nghiên cứu khoa học toàn cầu qua kiến trúc Big Data phân tán tích hợp: Batch Analytics, Real-time Streaming, Data Lakehouse & SQL Warehouse.
-    </div>
-    <div class="badge-row">
-        <span class="tech-badge spark">⚡ Apache Spark 3.5.3</span>
-        <span class="tech-badge kafka">📨 Apache Kafka 7.6.0</span>
-        <span class="tech-badge hdfs">🐘 Hadoop HDFS 3.2.1</span>
-        <span class="tech-badge hive">🏛️ Apache Hive 2.3.2</span>
-        <span class="tech-badge streamlit">📊 Streamlit 1.40.0</span>
-        <span class="tech-badge">🐳 12 Containers</span>
+health_color = "#12b76a" if online_count == 4 else "#f79009"
+st.markdown(f"""
+<div class="hero">
+    <div class="hero-brand">{LOGO_IMG}</div>
+    <div class="hero-text">
+        <div class="eyebrow">CogAI Lab · Big Data Demo</div>
+        <h1>arXiv Big Data Platform</h1>
+        <p>Thu nhận bằng Kafka, xử lý bằng Spark Streaming, lưu trên HDFS và truy vấn bằng Hive.</p>
+        <div class="badge-row">
+            <span class="tech-badge spark">Apache Spark</span>
+            <span class="tech-badge kafka">Apache Kafka</span>
+            <span class="tech-badge hdfs">Hadoop HDFS</span>
+            <span class="tech-badge hive">Apache Hive</span>
+            <span class="tech-badge" style="color:{health_color}; border-color:{health_color}55; background:#ffffff;">● {online_count}/4 dịch vụ online</span>
+        </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 5. MAIN NAVIGATION TABS
+# 5. MAIN NAVIGATION
+#    Only the active section is rendered, and ?tab=<slug> opens a section directly
+#    (handy when demoing: /?tab=hive jumps straight to the SQL studio).
 # -----------------------------------------------------------------------------
-tab_analytics, tab_kafka, tab_streaming, tab_hive, tab_architecture = st.tabs([
-    "📊 Phân tích & Trực quan hóa",
-    "🚀 Thu nhận Stream (Kafka)",
-    "🌊 Xử lý Luồng & HDFS Lakehouse",
-    "🏛️ Hive SQL Data Warehouse",
-    "🗺️ Kiến trúc Hệ thống & Demo"
-])
+NAV_ITEMS = {
+    "overview": "Tổng quan",
+    "ingest": "Gửi dữ liệu",
+    "pipeline": "Xử lý & HDFS",
+    "hive": "Hive SQL",
+    "architecture": "Kiến trúc",
+}
+def _normalise_tab(value) -> str:
+    slug = str(value or "").strip().lower()
+    return slug if slug in NAV_ITEMS else "overview"
+
+
+requested_tab = _normalise_tab(st.query_params.get("tab"))
+
+# The URL wins only when it changes from outside the widget (deep link, Back/Forward).
+# When the user clicks a tab the widget state is already ahead of the URL, so we keep it.
+if st.session_state.get("_nav_url_tab") != requested_tab or "main_nav" not in st.session_state:
+    st.session_state["main_nav"] = NAV_ITEMS[requested_tab]
+
+_selected_tab = st.segmented_control(
+    "Điều hướng",
+    options=list(NAV_ITEMS.values()),
+    key="main_nav",
+    label_visibility="collapsed",
+)
+if not _selected_tab:
+    _selected_tab = NAV_ITEMS[requested_tab]
+
+_active_tab = next(slug for slug, label in NAV_ITEMS.items() if label == _selected_tab)
+st.session_state["_nav_url_tab"] = _active_tab
+if _normalise_tab(st.query_params.get("tab")) != _active_tab:
+    st.query_params["tab"] = _active_tab
+if _active_tab != "hive":
+    # Deep-link helpers only belong to the Hive tab; do not leak them to other sections.
+    for _stale_param in ("q", "auto"):
+        if _stale_param in st.query_params:
+            del st.query_params[_stale_param]
+
+show_overview = _selected_tab == NAV_ITEMS["overview"]
+show_ingest = _selected_tab == NAV_ITEMS["ingest"]
+show_pipeline = _selected_tab == NAV_ITEMS["pipeline"]
+show_hive = _selected_tab == NAV_ITEMS["hive"]
+show_architecture = _selected_tab == NAV_ITEMS["architecture"]
 
 # =============================================================================
-# TAB 1: PHÂN TÍCH CHUYÊN SÂU & TRỰC QUAN HÓA (BATCH ANALYTICS)
+# SECTION 1: TỔNG QUAN — PHÂN TÍCH BATCH & TRỰC QUAN HÓA
 # =============================================================================
-with tab_analytics:
+if show_overview:
     try:
         manifest = read_manifest()
         yearly = pd.read_parquet(RESULTS_DIR / "yearly_growth.parquet").sort_values("year")
-        fields = pd.read_parquet(RESULTS_DIR / "field_trends.parquet").sort_values("year")
-        keywords = pd.read_parquet(RESULTS_DIR / "hot_keyword_trends.parquet").sort_values("year")
+        fields = pd.read_parquet(RESULTS_DIR / "field_trends.parquet")
         span_years = int(manifest["max_year"]) - int(manifest["min_year"]) + 1
         group_names = sorted(fields["main_group"].dropna().unique().tolist())
         group_preview = ", ".join(group_names[:4]) + ("..." if len(group_names) > 4 else "")
         model = manifest.get("model") or {}
         if model.get("status") == "trained":
-            lda_value = f"{model.get('k', '?')} Topics LDA"
-            perplexity = model.get("test_log_perplexity")
-            lda_desc = f"Test log-perplexity: {perplexity:.2f}" if isinstance(perplexity, (int, float)) else "Đã huấn luyện trên tập train"
+            lda_desc = (
+                f"Test log-perplexity {model['test_log_perplexity']:.2f}"
+                if isinstance(model.get("test_log_perplexity"), (int, float))
+                else "Đã huấn luyện trên tập train"
+            )
         else:
-            lda_value = "Chưa huấn luyện"
-            lda_desc = "Chạy analyze không dùng --skip-topics"
-        total_seconds = manifest.get("total_analysis_seconds")
-        seconds_text = f"{total_seconds:.1f}s" if isinstance(total_seconds, (int, float)) else "Chưa ghi nhận"
-        source = manifest.get("source") or {}
-        shard_count = len(source.get("shards", [])) if isinstance(source.get("shards"), list) else "?"
-        source_desc = f"{shard_count} shard Parquet đã tải" if shard_count != "?" else "Nguồn cục bộ đã xác minh"
+            lda_desc = "Chưa huấn luyện"
 
-        # KPI Metrics Cards
         st.markdown(f"""
-        <div class="kpi-container">
-            <div class="kpi-card">
-                <div class="kpi-label">Tổng bài báo phân tích</div>
+        <div class="kpi-grid">
+            <div class="kpi">
+                <div class="kpi-top"><span class="kpi-label">Tổng bài báo</span><span class="kpi-icon">Σ</span></div>
                 <div class="kpi-value">{manifest['rows']:,}</div>
-                <div class="kpi-desc">{source_desc}</div>
+                <div class="kpi-hint">đã xử lý bằng Spark</div>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-label">Khoảng thời gian</div>
-                <div class="kpi-value">{manifest['min_year']} – {manifest['max_year']}</div>
-                <div class="kpi-desc">{span_years} năm nộp bài đầu tiên (v1)</div>
+            <div class="kpi violet">
+                <div class="kpi-top"><span class="kpi-label">Giai đoạn</span><span class="kpi-icon">◷</span></div>
+                <div class="kpi-value">{manifest['min_year']}–{manifest['max_year']}</div>
+                <div class="kpi-hint">{span_years} năm nộp bản v1</div>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-label">Nhóm ngành khoa học</div>
-                <div class="kpi-value">{manifest['groups']} Lĩnh vực</div>
-                <div class="kpi-desc">{group_preview}</div>
+            <div class="kpi green">
+                <div class="kpi-top"><span class="kpi-label">Nhóm ngành</span><span class="kpi-icon">◈</span></div>
+                <div class="kpi-value">{manifest['groups']}</div>
+                <div class="kpi-hint">{group_preview}</div>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-label">Mô hình phân cụm chủ đề</div>
-                <div class="kpi-value">{lda_value}</div>
-                <div class="kpi-desc">{lda_desc}</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-label">Thời gian phân tích Spark</div>
-                <div class="kpi-value">{seconds_text}</div>
-                <div class="kpi-desc">Đo bằng perf_counter trên cụm 4 cores</div>
+            <div class="kpi amber">
+                <div class="kpi-top"><span class="kpi-label">Chủ đề LDA</span><span class="kpi-icon">◇</span></div>
+                <div class="kpi-value">{model.get('k', '—')} topics</div>
+                <div class="kpi-hint">{lda_desc}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown('<div class="section-title">📈 Xu hướng Tăng trưởng & Diễn biến Lĩnh vực</div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="section-head">
+            <span class="section-num">01</span>
+            <div>
+                <h2>Bức tranh dữ liệu</h2>
+                <p>Chỉ giữ hai biểu đồ chính: số bài theo năm và quy mô từng nhóm ngành.</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        c_chart1, c_chart2 = st.columns([1.1, 1.2])
+        c_chart1, c_chart2 = st.columns([1.1, 1.0])
 
         with c_chart1:
-            # Dual-axis Bar + Line Chart
+            st.markdown(
+                '<div class="chart-title">Số bài báo theo năm</div>'
+                '<div class="chart-sub">Cột: số bài · Đường: tăng trưởng so với năm trước</div>',
+                unsafe_allow_html=True,
+            )
             fig_growth = make_subplots(specs=[[{"secondary_y": True}]])
             fig_growth.add_trace(
                 go.Bar(
                     x=yearly["year"],
                     y=yearly["count"],
-                    name="Số bài báo",
-                    marker=dict(color="#38bdf8", opacity=0.85, line=dict(color="#0284c7", width=1.5)),
-                    hovertemplate="<b>Năm %{x}</b><br>Số bài: %{y:,}<extra></extra>"
+                    name="Số bài",
+                    marker=dict(color="#1a6cf0", opacity=0.9, line=dict(width=0)),
+                    hovertemplate="<b>Năm %{x}</b><br>Số bài: %{y:,}<extra></extra>",
                 ),
-                secondary_y=False
+                secondary_y=False,
             )
-            # Add YoY Growth Line
             fig_growth.add_trace(
                 go.Scatter(
                     x=yearly["year"],
                     y=yearly["yoy_growth_rate"],
-                    name="Tăng trưởng YoY (%)",
+                    name="Tăng trưởng YoY",
                     mode="lines+markers",
-                    line=dict(color="#f43f5e", width=2.5),
-                    marker=dict(size=6, color="#f43f5e"),
-                    hovertemplate="<b>Năm %{x}</b><br>Tăng trưởng: %{y:.1f}%<extra></extra>"
+                    line=dict(color="#f79009", width=2.4),
+                    marker=dict(size=6, color="#f79009"),
+                    hovertemplate="<b>Năm %{x}</b><br>Tăng trưởng: %{y:.1f}%<extra></extra>",
                 ),
-                secondary_y=True
+                secondary_y=True,
             )
             fig_growth.update_layout(
-                title="<b>Số lượng bài báo & Tốc độ tăng trưởng hàng năm</b>",
-                template="plotly_dark",
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#0f172a",
-                height=380,
-                margin=dict(l=40, r=40, t=50, b=40),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                template="plotly_white",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Inter", color="#33547a", size=11),
+                height=330,
+                margin=dict(l=8, r=8, t=30, b=8),
+                bargap=0.4,
+                hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.03, xanchor="left", x=0, title=None, font=dict(size=10)),
             )
-            fig_growth.update_xaxes(title_text="Năm nộp bài", gridcolor="rgba(148, 163, 184, 0.1)")
-            fig_growth.update_yaxes(title_text="Số bài báo", secondary_y=False, gridcolor="rgba(148, 163, 184, 0.1)")
-            fig_growth.update_yaxes(title_text="Tăng trưởng (%)", secondary_y=True, gridcolor="transparent")
-            st.plotly_chart(fig_growth, use_container_width=True)
+            fig_growth.update_xaxes(title_text=None, gridcolor="#e6eef8", zeroline=False)
+            fig_growth.update_yaxes(title_text="Số bài", secondary_y=False, gridcolor="#e6eef8", zeroline=False)
+            fig_growth.update_yaxes(title_text="Tăng trưởng (%)", secondary_y=True, showgrid=False, zeroline=False)
+            st.plotly_chart(fig_growth, use_container_width=True, config={"displayModeBar": False})
 
         with c_chart2:
-            # Area chart of the precomputed, manifest-verified percentage share.
-            fields_pct = fields.copy()
-            major_groups = fields_pct.groupby("main_group")["count"].sum().nlargest(8).index.tolist()
-            fields_filtered = fields_pct[fields_pct["main_group"].isin(major_groups)]
-
-            fig_fields = px.area(
-                fields_filtered,
-                x="year",
-                y="percentage_share",
-                color="main_group",
-                title="<b>Tỷ trọng các lĩnh vực nghiên cứu chủ chốt (%)</b>",
-                color_discrete_sequence=px.colors.qualitative.Prism,
-                template="plotly_dark"
+            st.markdown(
+                '<div class="chart-title">Quy mô theo nhóm ngành</div>'
+                '<div class="chart-sub">Tổng số bài của từng nhóm trong toàn bộ giai đoạn</div>',
+                unsafe_allow_html=True,
             )
-            fig_fields.update_layout(
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#0f172a",
-                height=380,
-                margin=dict(l=40, r=40, t=50, b=40),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None)
+            group_totals = (
+                fields.groupby("main_group", as_index=False)["count"].sum().sort_values("count")
             )
-            fig_fields.update_xaxes(title_text="Năm", gridcolor="rgba(148, 163, 184, 0.1)")
-            fig_fields.update_yaxes(title_text="Tỷ trọng (%)", gridcolor="rgba(148, 163, 184, 0.1)")
-            st.plotly_chart(fig_fields, use_container_width=True)
-
-        # Keyword Trend Explorer
-        st.markdown('<div class="section-title">🔍 Khám phá Xu hướng Từ khóa Công nghệ Nóng</div>', unsafe_allow_html=True)
-        available_keywords = sorted(keywords["word"].unique().tolist())
-        selected_keywords = st.multiselect(
-            "Chọn từ khóa để phân tích tần suất xuất hiện:",
-            options=available_keywords,
-            default=["transformer", "diffusion", "quantum", "neural", "deep"] if all(k in available_keywords for k in ["transformer", "diffusion", "quantum", "neural", "deep"]) else available_keywords[:5]
-        )
-
-        if selected_keywords:
-            kw_filtered = keywords[keywords["word"].isin(selected_keywords)]
-            fig_kw = px.line(
-                kw_filtered,
-                x="year",
-                y="frequency",
-                color="word",
-                markers=True,
-                title="<b>Tần suất xuất hiện của từ khóa qua các năm</b>",
-                color_discrete_sequence=px.colors.qualitative.Bold,
-                template="plotly_dark"
+            fig_groups = px.bar(
+                group_totals,
+                x="count",
+                y="main_group",
+                orientation="h",
+                template="plotly_white",
+                color_discrete_sequence=["#1a6cf0"],
             )
-            fig_kw.update_layout(
-                paper_bgcolor="#1e293b",
-                plot_bgcolor="#0f172a",
-                height=340,
-                margin=dict(l=40, r=40, t=50, b=40),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None)
+            fig_groups.update_traces(
+                marker_line_width=0,
+                hovertemplate="<b>%{y}</b><br>%{x:,} bài<extra></extra>",
             )
-            fig_kw.update_xaxes(title_text="Năm", gridcolor="rgba(148, 163, 184, 0.1)")
-            fig_kw.update_yaxes(title_text="Tần suất (Token counts)", gridcolor="rgba(148, 163, 184, 0.1)")
-            st.plotly_chart(fig_kw, use_container_width=True)
+            fig_groups.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Inter", color="#33547a", size=11),
+                height=330,
+                margin=dict(l=8, r=12, t=30, b=8),
+                showlegend=False,
+                bargap=0.35,
+            )
+            fig_groups.update_xaxes(title_text="Số bài", gridcolor="#e6eef8", zeroline=False)
+            fig_groups.update_yaxes(title_text=None, gridcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig_groups, use_container_width=True, config={"displayModeBar": False})
 
-        # Scientific Charts Gallery
-        year_span = f"{manifest['min_year']}–{manifest['max_year']}"
-        st.markdown(f'<div class="section-title">🎨 Thư viện 12 Biểu đồ Khoa học ({year_span})</div>', unsafe_allow_html=True)
+        total_rows = int(manifest["rows"])
+        top_group = group_totals.iloc[-1]
+        top_share = (top_group["count"] / total_rows * 100) if total_rows else 0
+        last_year = int(manifest["max_year"])
+        last_year_rows = yearly[yearly["year"] == last_year]
+        last_count = int(last_year_rows["count"].iloc[0]) if not last_year_rows.empty else 0
 
-        charts_catalog = [
-            ("01_yearly_growth.png", "1. Tăng trưởng qua các năm", f"Số lượng bài báo và tốc độ tăng trưởng YoY, giai đoạn {year_span}."),
-            ("02_field_trends.png", "2. Diễn biến Lĩnh vực", "Tỷ trọng các nhóm ngành theo năm; nhóm vật lý được gộp theo data contract."),
-            ("03_top_categories.png", "3. Top 15 Chuyên ngành", "Các chuyên ngành có tổng số công bố lớn nhất trong tập đã tải."),
-            ("04_heatmap.png", "4. Bản đồ nhiệt Mật độ", "Ma trận số bài theo từng năm và chuyên ngành hàng đầu."),
-            ("05_keyword_trends.png", "5. Xu hướng Từ khóa", "Tần suất 16 từ khóa công nghệ trên 1.000 bài mỗi năm."),
-            ("06_wordclouds.png", "6. Đám mây Từ khóa", "Các token abstract phổ biến nhất, tách theo nhóm ngành."),
-            ("07_field_distribution.png", "7. Cơ cấu Lĩnh vực", "Tỷ lệ tổng thể giữa các nhóm ngành khoa học trong tập đã tải."),
-            ("08_author_collaboration_trend.png", "8. Hợp tác Khoa học", "Số tác giả bình quân trên mỗi bài báo theo năm."),
-            ("09_top_authors.png", "9. Top 20 Tác giả", "Tên tác giả xuất hiện nhiều nhất; chưa phân giải tên trùng."),
-            ("10_validated_trend.png", "10. Ngoại suy Xu thế có Kiểm định", "Chỉ vẽ dự phóng tối đa 3 năm khi MAE vượt baseline holdout."),
-            ("11_field_radar_comparison.png", "11. Radar So sánh Đa chiều", "So sánh quy mô, hợp tác, độ dài abstract và tăng trưởng giữa các nhóm."),
-            ("12_lda_topic_bubble.png", "12. Phân cụm Chủ đề LDA", "Trọng số thuật ngữ của các chủ đề do Spark MLlib LDA huấn luyện.")
-        ]
+        st.markdown("""
+        <div class="section-head">
+            <span class="section-num">02</span>
+            <div>
+                <h2>Ba điểm chính để trình bày</h2>
+                <p>Đủ ngắn để nói trong một phút khi demo.</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        chart_filter = st.selectbox(
-            "Lọc biểu đồ chuyên đề:",
-            ["Tất cả 12 biểu đồ", "Xu hướng & Tăng trưởng", "Chuyên ngành & Lĩnh vực", "Từ khóa & Chủ đề LDA", "Tác giả & Hợp tác"]
-        )
-
-        filtered_catalog = charts_catalog
-        if chart_filter == "Xu hướng & Tăng trưởng":
-            filtered_catalog = [c for c in charts_catalog if c[0] in ["01_yearly_growth.png", "02_field_trends.png", "10_validated_trend.png"]]
-        elif chart_filter == "Chuyên ngành & Lĩnh vực":
-            filtered_catalog = [c for c in charts_catalog if c[0] in ["03_top_categories.png", "04_heatmap.png", "07_field_distribution.png", "11_field_radar_comparison.png"]]
-        elif chart_filter == "Từ khóa & Chủ đề LDA":
-            filtered_catalog = [c for c in charts_catalog if c[0] in ["05_keyword_trends.png", "06_wordclouds.png", "12_lda_topic_bubble.png"]]
-        elif chart_filter == "Tác giả & Hợp tác":
-            filtered_catalog = [c for c in charts_catalog if c[0] in ["08_author_collaboration_trend.png", "09_top_authors.png"]]
-
-        cols = st.columns(3)
-        for idx, (img_name, title, desc) in enumerate(filtered_catalog):
-            col_target = cols[idx % 3]
-            img_path = OUTPUT_DIR / "charts" / img_name
-            with col_target:
-                st.markdown(f"""
-                <div class="gallery-card">
-                    <div class="gallery-title">{title}</div>
-                    <div class="gallery-caption">{desc}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                if img_path.exists():
-                    st.image(str(img_path), use_container_width=True)
-                else:
-                    st.info(f"Đang đồng bộ tệp: {img_name}")
-
-        # Data Explorer
-        with st.expander("📋 Trình khám phá Dữ liệu Parquet Kết quả (Data Explorer)"):
-            table_choice = st.selectbox("Chọn bảng dữ liệu kết quả:", [
-                "yearly_growth.parquet (Tăng trưởng hàng năm)",
-                "field_trends.parquet (Diễn biến lĩnh vực)",
-                "top_categories_yearly.parquet (Top chuyên ngành theo năm)",
-                "hot_keyword_trends.parquet (Tần suất từ khóa)",
-                "top_authors.parquet (Top 20 tác giả)",
-                "author_trends.parquet (Xu hướng số tác giả)"
-            ])
-            file_name = table_choice.split(" ")[0]
-            target_parquet = RESULTS_DIR / file_name
-            if target_parquet.exists():
-                df_view = pd.read_parquet(target_parquet)
-                st.caption(f"Kích thước bảng: {df_view.shape[0]:,} dòng × {df_view.shape[1]} cột")
-                st.dataframe(df_view.head(100), use_container_width=True)
-                csv_data = df_view.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label=f"📥 Tải {file_name} (.csv)",
-                    data=csv_data,
-                    file_name=file_name.replace(".parquet", ".csv"),
-                    mime="text/csv"
-                )
+        st.markdown(f"""
+        <div class="insight-grid">
+            <div class="insight">
+                <div class="insight-title">Pipeline rõ ràng</div>
+                <div class="insight-text">Parquet → Spark → HDFS → Hive → Dashboard.
+                Cùng một nguồn dữ liệu, chạy được cả batch và streaming.</div>
+            </div>
+            <div class="insight green">
+                <div class="insight-title">{top_group['main_group']} dẫn đầu</div>
+                <div class="insight-text">Chiếm <b>{top_share:.0f}%</b> tổng số bài
+                ({int(top_group['count']):,} bài), cho thấy dữ liệu tập trung ở nhóm ngành này.</div>
+            </div>
+            <div class="insight amber">
+                <div class="insight-title">Lưu ý năm {last_year}</div>
+                <div class="insight-text">Chỉ có <b>{last_count:,} bài</b> vì phạm vi dữ liệu dừng ở
+                {last_year} (bản trích xuất 2 shard). Mức giảm cuối biểu đồ phản ánh giới hạn
+                phạm vi, không phải xu hướng thật của ngành.</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     except (FileNotFoundError, KeyError, ValueError, RuntimeError, OSError) as exc:
-        st.warning(f"⚠️ Chưa có kết quả phân tích hoặc manifest chưa được đồng bộ: {exc}")
+        st.warning(f"Chưa có kết quả phân tích hoặc manifest chưa được đồng bộ: {exc}")
         st.code("docker compose exec spark-jupyter python src/batch_pipeline.py all", language="shell")
 
-# =============================================================================
-# TAB 2: KAFKA INGESTION STUDIO
-# =============================================================================
-with tab_kafka:
-    st.markdown('<div class="section-title">🚀 Thu nhận Dữ liệu Stream qua Apache Kafka</div>', unsafe_allow_html=True)
-    st.info("Luồng phát dữ liệu mô phỏng bài báo mới đến Message Broker Kafka (Topic: `arxiv-papers-v2`).")
 
-    col_single, col_replay = st.columns([1.1, 1.0])
+# =============================================================================
+# SECTION 2: GỬI DỮ LIỆU — KAFKA INGESTION STUDIO
+# =============================================================================
+if show_ingest:
+    st.markdown(f"""
+    <div class="section-head">
+        <span class="section-num">KAFKA</span>
+        <div>
+            <h2>Thu nhận dữ liệu stream</h2>
+            <p>Producer gửi bài báo mới vào topic <b>{topic}</b>, sau đó Spark Streaming tiêu thụ và ghi xuống HDFS.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_single, col_replay = st.columns([1.15, 1.0])
 
     with col_single:
-        st.markdown("#### 📝 Soạn & Gửi Bài Báo Mới (Single Producer)")
+        st.markdown('<div class="chart-title">Gửi một bài báo mới</div><div class="chart-sub">Dữ liệu vào Kafka rồi đi tiếp sang Hive sau khi streaming xử lý.</div>', unsafe_allow_html=True)
         with st.form("form_single_paper", clear_on_submit=False):
-            p_id = st.text_input("ID arXiv (VD: 2401.00001 hoặc 0704.0001)", "2401.00001")
-            p_title = st.text_input("Tiêu đề bài báo", "Scalable Deep Learning Architectures in Big Data Analytics")
-            p_authors = st.text_input("Danh sách tác giả", "Nguyen Van A, Le Thi B, John Doe")
-            p_cats = st.selectbox("Lĩnh vực chính (Categories)", [
+            p_id = st.text_input("ID arXiv", "2401.00001", help="Ví dụ: 2401.00001 hoặc 0704.0001")
+            p_title = st.text_input("Tiêu đề", "Scalable Deep Learning Architectures in Big Data Analytics")
+            p_authors = st.text_input("Tác giả", "Nguyen Van A, Le Thi B, John Doe")
+            p_cats = st.selectbox("Lĩnh vực", [
                 "cs.AI cs.LG (Trí tuệ nhân tạo & Học máy)",
                 "cs.DC cs.DB (Hệ thống phân tán & CSDL)",
                 "cs.CV (Thị giác máy tính)",
@@ -655,14 +422,15 @@ with tab_kafka:
                 "stat.ML (Thống kê máy học)"
             ])
             p_abstract = st.text_area(
-                "Tóm tắt (Abstract)",
-                "We present a comprehensive empirical evaluation of distributed streaming pipelines using Apache Kafka, Apache Spark, and Hadoop HDFS for high-throughput scientific paper metadata processing."
+                "Tóm tắt",
+                "We present a comprehensive empirical evaluation of distributed streaming pipelines using Apache Kafka, Apache Spark, and Hadoop HDFS for high-throughput scientific paper metadata processing.",
+                height=110
             )
-            submit_paper = st.form_submit_button("🚀 Gửi bài báo vào Kafka Broker", use_container_width=True)
+            submit_paper = st.form_submit_button("Gửi vào Kafka", use_container_width=True, type="primary")
 
         if submit_paper:
             try:
-                clean_cats = p_cats.split(" ")[0]
+                clean_cats = p_cats.split("(")[0].strip()
                 record_payload = {
                     "id": p_id.strip(),
                     "title": p_title.strip(),
@@ -673,7 +441,10 @@ with tab_kafka:
                     "timestamp": time.time()
                 }
                 meta = send_single_paper(record_payload, bootstrap_servers=kafka_server, topic=topic)
-                st.success(f"✅ Đã gửi thành công! Kafka ACK: Topic=`{meta.topic}`, Partition=`{meta.partition}`, Offset=`{meta.offset}`")
+                st.success(
+                    f"Đã gửi thành công. Topic `{meta.topic}` · Partition `{meta.partition}` · Offset `{meta.offset}`."
+                )
+                st.caption("Xem bài vừa gửi tại tab **Hive SQL → mẫu 6. Bài báo streaming mới nhất** (sau khi consumer xử lý xong).")
                 st.session_state.event_history.insert(0, {
                     "Thời gian": datetime.now().strftime("%H:%M:%S"),
                     "ID": p_id,
@@ -683,99 +454,185 @@ with tab_kafka:
                     "Trạng thái": "ACK OK"
                 })
             except Exception as e:
-                st.error(f"❌ Không thể gửi bài báo vào Kafka: {e}")
-                st.caption("Hãy đảm bảo container Kafka đang chạy tại localhost:9092.")
+                st.error(f"Không thể gửi bài báo vào Kafka: {e}")
+                st.caption("Kiểm tra container Kafka tại `localhost:9092`.")
 
     with col_replay:
-        st.markdown("#### ⚡ Phát Lại Hàng Loạt (Batch Replay Simulator)")
-        st.caption("Trích xuất bài báo thực tế từ Parquet và phát liên tục vào Kafka để thử nghiệm khả năng chịu tải.")
+        st.markdown('<div class="chart-title">Phát lại hàng loạt</div><div class="chart-sub">Lấy bài báo thực tế từ Parquet và bắn liên tục vào Kafka để thử tải.</div>', unsafe_allow_html=True)
+        num_replay = st.slider("Số bản ghi phát lại", min_value=5, max_value=100, value=20, step=5)
 
-        num_replay = st.slider("Số lượng bản ghi phát lại:", min_value=5, max_value=100, value=20, step=5)
-
-        if st.button("▶️ Khởi động Replay Stream", use_container_width=True):
+        if st.button("Khởi động replay", use_container_width=True):
             sent_count = 0
             producer = None
+            replay_history = []
             try:
                 records = list(sample_papers_from_local(limit=num_replay))
                 producer = get_kafka_producer(kafka_server)
                 prog_bar = st.progress(0.0)
                 status_box = st.empty()
 
-                for i, r in enumerate(records):
+                for r in records:
                     fut = producer.send(topic, key=r["id"], value=r)
                     res = fut.get(timeout=10)
                     sent_count += 1
                     prog_bar.progress(sent_count / len(records))
-                    status_box.markdown(f"Đang gửi bài `{r['id']}` → Partition {res.partition}, Offset {res.offset}")
+                    status_box.markdown(f"`{r['id']}` → Partition {res.partition}, Offset {res.offset}")
+                    replay_history.append({
+                        "Thời gian": datetime.now().strftime("%H:%M:%S"),
+                        "ID": r["id"],
+                        "Tiêu đề": (r.get("title") or "")[:45] + "...",
+                        "Partition": res.partition,
+                        "Offset": res.offset,
+                        "Trạng thái": "ACK OK",
+                    })
                     time.sleep(0.02)
 
-                st.success(f"🎉 Hoàn thành phát lại! Đã xác nhận ACK cho **{sent_count}/{len(records)}** bài báo vào topic `{topic}`.")
+                st.success(f"Đã xác nhận ACK cho **{sent_count}/{len(records)}** bài vào topic `{topic}`.")
             except Exception as exc:
-                st.error(f"Dừng phát luồng: Đã gửi được {sent_count} bài. Lỗi: {exc}")
+                st.error(f"Dừng phát luồng sau {sent_count} bài: {exc}")
             finally:
+                if replay_history:
+                    st.session_state.event_history = (
+                        replay_history[::-1] + st.session_state.event_history
+                    )[:50]
                 if producer is not None:
                     producer.close(timeout=3)
 
-    # Event history log table
-    st.markdown("---")
-    st.markdown("#### 📜 Nhật ký Sự kiện Stream Đã Phát (Session Event Log)")
+    st.markdown("""
+    <div class="section-head">
+        <span class="section-num">LOG</span>
+        <div>
+            <h2>Nhật ký phiên hiện tại</h2>
+            <p>Các sự kiện đã phát thành công trong phiên làm việc này.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     if st.session_state.event_history:
-        st.dataframe(pd.DataFrame(st.session_state.event_history), use_container_width=True)
+        st.dataframe(pd.DataFrame(st.session_state.event_history), use_container_width=True, hide_index=True)
     else:
         st.caption("Chưa có sự kiện nào được phát trong phiên hiện tại.")
 
 # =============================================================================
-# TAB 3: SPARK STREAMING & HDFS LAKEHOUSE
+# SECTION 3: XỬ LÝ & HDFS — SPARK STREAMING LAKEHOUSE
 # =============================================================================
-with tab_streaming:
-    st.markdown('<div class="section-title">🌊 Spark Structured Streaming & HDFS Lakehouse</div>', unsafe_allow_html=True)
-
-    col_stream_info, col_consumer_ctrl = st.columns([1.2, 1.0])
-
-    with col_stream_info:
-        st.markdown("""
-        **Quy trình Xử lý Luồng (Real-time Pipeline):**
-        1. **Consumer Engine**: Spark Structured Streaming đọc theo micro-batch từ topic `arxiv-papers-v2`.
-        2. **NLP Transformer**: Làm sạch văn bản, tokenize từ khóa abstract, lọc danh sách Stopwords.
-        3. **Fault Tolerance**: Lưu checkpoint vị trí đọc tại `/checkpoint/arxiv_stream_v2`.
-        4. **Sink Storage**: Ghi Parquet vào HDFS, phân vùng theo `main_group_clean`: `/data/arxiv_stream_v2`.
-        """)
-
-    with col_consumer_ctrl:
-        st.markdown("""
-        <div style="background: rgba(30,41,59,0.8); border: 1px solid rgba(148,163,184,0.2); border-radius: 12px; padding: 14px;">
-            <div style="font-weight: 600; color: #f8fafc; margin-bottom: 6px;">Lệnh Khởi động Streaming Consumer:</div>
-            <code style="font-size: 0.8rem; color: #38bdf8;">docker compose --profile streaming up -d streaming-consumer</code>
-            <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 8px;">
-                Consumer sẽ tự động lắng nghe và nạp dữ liệu từ Kafka vào HDFS liên tục.
-            </div>
+if show_pipeline:
+    st.markdown("""
+    <div class="section-head">
+        <span class="section-num">STREAM</span>
+        <div>
+            <h2>Spark Structured Streaming &amp; HDFS Lakehouse</h2>
+            <p>Bốn bước từ Kafka đến bảng Hive, kèm trình duyệt dữ liệu trên HDFS.</p>
         </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown("#### 📂 Trình duyệt HDFS Data Lakehouse (File Explorer)")
+    st.markdown("""
+    <div class="pipeline">
+        <div class="pipe-step">
+            <div class="pipe-num">01</div>
+            <div class="pipe-title">Consumer Engine</div>
+            <div class="pipe-desc">Spark Structured Streaming đọc micro-batch từ topic <b>arxiv-papers-v2</b>.</div>
+        </div>
+        <div class="pipe-step">
+            <div class="pipe-num">02</div>
+            <div class="pipe-title">NLP Transformer</div>
+            <div class="pipe-desc">Làm sạch văn bản, tokenize abstract và loại bỏ stopwords.</div>
+        </div>
+        <div class="pipe-step">
+            <div class="pipe-num">03</div>
+            <div class="pipe-title">Fault Tolerance</div>
+            <div class="pipe-desc">Checkpoint vị trí đọc tại <b>/checkpoint/arxiv_stream_v2</b>.</div>
+        </div>
+        <div class="pipe-step">
+            <div class="pipe-num">04</div>
+            <div class="pipe-title">Sink Storage</div>
+            <div class="pipe-desc">Ghi Parquet vào HDFS, phân vùng theo <b>main_group_clean</b>.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    hdfs_path = st.text_input("Đường dẫn HDFS:", value="/data")
-    if st.button("🔄 Duyệt thư mục HDFS"):
-        pass
+    st.markdown("""
+    <div class="code-box">
+        <div class="code-box-label">Lệnh khởi động streaming consumer</div>
+        <code>docker compose --profile streaming up -d streaming-consumer</code>
+        <div class="code-box-note">Consumer lắng nghe Kafka và nạp dữ liệu vào HDFS liên tục. Dữ liệu sau đó được bảng Hive <b>arxiv_stream</b> đọc trực tiếp.</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    entries = list_hdfs_dir(hdfs_path)
+    st.markdown("""
+    <div class="section-head">
+        <span class="section-num">HDFS</span>
+        <div>
+            <h2>Trình duyệt Data Lakehouse</h2>
+            <p>Chỉ tải lại khi bạn bấm nút, để dashboard không bị chậm sau mỗi thao tác.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if "hdfs_entries" not in st.session_state:
+        st.session_state.hdfs_entries = {}
+    if "hdfs_path" not in st.session_state:
+        st.session_state.hdfs_path = "/data"
+
+    col_path, col_btn = st.columns([3, 1])
+    with col_path:
+        hdfs_path = st.text_input("Đường dẫn HDFS", value=st.session_state.hdfs_path, label_visibility="collapsed", placeholder="/data")
+    with col_btn:
+        load_hdfs = st.button("Duyệt thư mục", use_container_width=True)
+
+    if load_hdfs or hdfs_path not in st.session_state.hdfs_entries:
+        with st.spinner("Đang đọc NameNode..."):
+            st.session_state.hdfs_entries[hdfs_path] = list_hdfs_dir(hdfs_path)
+        st.session_state.hdfs_path = hdfs_path
+
+    entries = st.session_state.hdfs_entries.get(hdfs_path)
     if entries:
-        df_hdfs = pd.DataFrame(entries)
-        # Format columns if available
-        st.success(f"Đã tìm thấy {len(df_hdfs)} đối tượng trong thư mục `{hdfs_path}` trên NameNode.")
-        st.dataframe(df_hdfs, use_container_width=True)
+        def human_size(value):
+            try:
+                size = float(value)
+            except (TypeError, ValueError):
+                return "—"
+            for unit in ("B", "KB", "MB", "GB", "TB"):
+                if size < 1024 or unit == "TB":
+                    return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+                size /= 1024
+            return f"{size:.1f} TB"
+
+        df_raw = pd.DataFrame(entries)
+        df_view = pd.DataFrame({
+            "Tên": df_raw.get("pathSuffix", ""),
+            "Loại": df_raw.get("type", "").map(lambda t: "Thư mục" if t == "DIRECTORY" else "Tệp"),
+            "Kích thước": [
+                "—" if t == "DIRECTORY" else human_size(size)
+                for t, size in zip(df_raw.get("type", ""), df_raw.get("length", 0))
+            ],
+            "Sửa đổi": pd.to_datetime(df_raw.get("modificationTime", 0), unit="ms").dt.strftime("%d/%m/%Y %H:%M"),
+            "Chủ sở hữu": df_raw.get("owner", ""),
+            "Quyền": df_raw.get("permission", ""),
+        })
+        st.markdown(
+            f'<div class="result-bar"><span class="result-chip">Thư mục <strong>{hdfs_path}</strong></span>'
+            f'<span class="result-chip"><strong>{len(df_view)}</strong> đối tượng</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.dataframe(df_view, use_container_width=True, hide_index=True)
+        st.caption("Muốn xem nội dung bản ghi, dùng tab **Hive SQL** — Hive đọc trực tiếp cùng dữ liệu Parquet này.")
     else:
-        st.info(f"Không thể đọc hoặc thư mục `{hdfs_path}` đang trống. Hãy kiểm tra trạng thái NameNode hoặc chạy consumer để tạo dữ liệu.")
+        st.info(f"Không đọc được hoặc thư mục `{hdfs_path}` đang trống. Kiểm tra NameNode hoặc chạy consumer để tạo dữ liệu.")
 
 # =============================================================================
-# TAB 4: HIVE SQL DATA WAREHOUSE & QUERY STUDIO
+# SECTION 4: HIVE SQL — DATA WAREHOUSE & QUERY STUDIO
 # =============================================================================
-with tab_hive:
-    st.markdown('<div class="section-title">🏛️ Apache Hive Data Warehouse & SQL Studio</div>', unsafe_allow_html=True)
-    st.caption("Truy vấn phân tích dữ liệu bài báo khoa học qua HiveServer2 Thrift Protocol (Database: `arxiv_db`).")
-
-    col_q1, col_q2 = st.columns([1.2, 0.8])
+if show_hive:
+    st.markdown("""
+    <div class="section-head">
+        <span class="section-num">HIVE</span>
+        <div>
+            <h2>SQL Warehouse</h2>
+            <p>Truy vấn trực tiếp <b>arxiv_db</b> qua HiveServer2 Thrift. Kết quả được giữ lại khi thao tác tiếp.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     templates = {
         "1. Thống kê bài báo theo năm nộp": (
@@ -785,10 +642,10 @@ with tab_hive:
             "ORDER BY year DESC"
         ),
         "2. Top nhóm ngành có công bố nhiều nhất": (
-            "SELECT main_group, COUNT(*) AS paper_count,\n"
-            "       ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM arxiv_historical), 2) AS percentage\n"
-            "FROM arxiv_historical\n"
-            "GROUP BY main_group\n"
+            "SELECT main_group, paper_count,\n"
+            "       ROUND(paper_count * 100.0 / SUM(paper_count) OVER (), 2) AS percentage\n"
+            "FROM (SELECT main_group, COUNT(*) AS paper_count\n"
+            "      FROM arxiv_historical GROUP BY main_group) g\n"
             "ORDER BY paper_count DESC\n"
             "LIMIT 10"
         ),
@@ -808,113 +665,223 @@ with tab_hive:
             "SELECT id, year, main_group, title\n"
             "FROM arxiv_historical\n"
             "LIMIT 15"
-        )
+        ),
+        "6. Bài báo streaming mới nhất (xem bài vừa gửi)": (
+            "SELECT id, title, year, main_group_clean, processed_time\n"
+            "FROM arxiv_stream\n"
+            "ORDER BY processed_time DESC, id DESC\n"
+            "LIMIT 20"
+        ),
+        "7. So sánh mẫu: raw vs clean vs tokens": (
+            "SELECT id, main_group_clean, year,\n"
+            "       LENGTH(abstract) AS raw_chars,\n"
+            "       LENGTH(clean_abstract) AS clean_chars,\n"
+            "       SIZE(abstract_tokens) AS token_count,\n"
+            "       processed_time\n"
+            "FROM arxiv_stream\n"
+            "ORDER BY processed_time DESC, id DESC\n"
+            "LIMIT 12"
+        ),
+        "8. Phân bố sự kiện theo nhóm ngành": (
+            "SELECT main_group_clean, COUNT(*) AS events,\n"
+            "       COUNT(DISTINCT id) AS papers,\n"
+            "       ROUND(AVG(SIZE(abstract_tokens)), 1) AS avg_tokens,\n"
+            "       ROUND(AVG(LENGTH(clean_abstract)), 0) AS avg_clean_chars\n"
+            "FROM arxiv_stream\n"
+            "GROUP BY main_group_clean\n"
+            "ORDER BY events DESC"
+        ),
     }
 
+    col_q1, col_q2 = st.columns([1.35, 0.65])
+
+    # Deep link helper: ?tab=hive&q=7 preselects template 7, &auto=1 runs it once.
+    template_names = list(templates.keys())
+    preset_index = 0
+    template_param = str(st.query_params.get("q", "")).strip()
+    if template_param:
+        for idx, name in enumerate(template_names):
+            if name.split(".")[0].strip() == template_param:
+                preset_index = idx
+                break
+
     with col_q1:
-        chosen_template = st.selectbox("🎯 Chọn câu truy vấn phân tích mẫu:", list(templates.keys()))
-        sql_input = st.text_area("Trình soạn thảo HiveQL:", templates[chosen_template], height=160)
+        chosen_template = st.selectbox("Mẫu truy vấn", template_names, index=preset_index)
+        sql_input = st.text_area(
+            "HiveQL",
+            templates[chosen_template],
+            height=175,
+            key=f"hive_sql_{chosen_template}",
+        )
 
     with col_q2:
-        st.markdown("#### ⚡ Thao tác Kho dữ liệu")
-        st.markdown("""
-        - **MSCK REPAIR**: Cập nhật phân vùng cho cả `arxiv_historical` (theo năm) và `arxiv_stream`.
-        - **Execute**: Gửi truy vấn HiveQL trực tiếp đến HiveServer2 container qua Thrift RPC.
-        """)
-        if st.button("🔄 Cập nhật phân vùng (MSCK REPAIR)", use_container_width=True):
+        st.markdown('<div class="chart-title">Thao tác kho dữ liệu</div><div class="chart-sub">Cập nhật phân vùng rồi thực thi truy vấn.</div>', unsafe_allow_html=True)
+        refresh_clicked = st.button("Cập nhật phân vùng (MSCK REPAIR)", use_container_width=True, key="hive_refresh_btn")
+        run_sql = st.button("Thực thi truy vấn", use_container_width=True, type="primary", key="hive_run_btn")
+
+        if refresh_clicked:
             try:
-                counts = refresh_all_partitions()
-                st.success(
-                    "✅ Đã cập nhật phân vùng: "
-                    f"`arxiv_historical` = {counts['historical']:,} dòng, "
-                    f"`arxiv_stream` = {counts['stream']:,} sự kiện."
-                )
+                st.session_state.hive_refresh = {"ok": True, "counts": refresh_all_partitions()}
             except Exception as e:
-                st.error(f"Lỗi cập nhật: {e}")
+                st.session_state.hive_refresh = {"ok": False, "error": str(e)}
 
-        run_sql = st.button("▶️ Thực thi Truy vấn SQL", use_container_width=True, type="primary")
+        refresh_state = st.session_state.get("hive_refresh")
+        if refresh_state:
+            if refresh_state["ok"]:
+                c = refresh_state["counts"]
+                st.success(
+                    f"Đã cập nhật phân vùng: `arxiv_historical` = {c['historical']:,} dòng, "
+                    f"`arxiv_stream` = {c['stream']:,} sự kiện."
+                )
+            else:
+                st.error(f"Lỗi cập nhật phân vùng: {refresh_state['error']}")
 
-    if run_sql:
+        st.markdown(
+            '<div class="code-box-note" style="margin-top:10px;">'
+            'Mẫu <b>6</b> hiển thị các bài vừa gửi qua Kafka. Nếu chưa thấy, kiểm tra '
+            'container <b>streaming-consumer</b> đang chạy.</div>',
+            unsafe_allow_html=True,
+        )
+
+    auto_run = st.query_params.get("auto") == "1" and not st.session_state.get("hive_auto_ran")
+    if auto_run:
+        st.session_state.hive_auto_ran = True
+
+    if run_sql or auto_run:
+        # Clear any previous result so a slow query never shows stale rows.
+        st.session_state.hive_result = None
+        st.session_state.hive_meta = None
+        st.session_state.hive_error = None
         try:
             t_start = time.perf_counter()
-            with st.spinner("Đang thực thi truy vấn trên cụm Hive..."):
+            with st.spinner("Đang thực thi trên HiveServer2..."):
                 res_df = query_hive(sql_input)
-            t_elapsed = time.perf_counter() - t_start
-            st.success(f"✅ Hive trả về **{len(res_df):,}** dòng kết quả trong **{t_elapsed:.2f} giây**.")
-            st.dataframe(res_df, use_container_width=True)
-
-            if not res_df.empty:
-                csv_bytes = res_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Xuất kết quả CSV",
-                    data=csv_bytes,
-                    file_name="hive_query_result.csv",
-                    mime="text/csv"
-                )
+            elapsed = time.perf_counter() - t_start
+            st.session_state.hive_result = res_df
+            st.session_state.hive_meta = {"rows": len(res_df), "seconds": elapsed, "sql": sql_input}
+            st.session_state.hive_error = None
         except Exception as e:
-            st.error(f"❌ Truy vấn Hive thất bại: {e}")
-            st.info("💡 Lưu ý: Hãy đảm bảo HiveServer2 container đang chạy tại `localhost:10000`.")
+            st.session_state.hive_result = None
+            st.session_state.hive_error = str(e)
+
+    if st.session_state.get("hive_error"):
+        st.error(f"Truy vấn thất bại: {st.session_state.hive_error}")
+        st.caption("Kiểm tra HiveServer2 tại `localhost:10000` hoặc chạy MSCK REPAIR nếu bảng chưa thấy dữ liệu.")
+
+    res_df = st.session_state.get("hive_result")
+    if res_df is not None:
+        meta = st.session_state.get("hive_meta", {})
+        st.markdown(
+            f'<div class="result-bar">'
+            f'<span class="result-chip"><strong>{meta.get("rows", len(res_df)):,}</strong> dòng</span>'
+            f'<span class="result-chip"><strong>{meta.get("seconds", 0):.2f}s</strong> thời gian</span>'
+            f'<span class="result-chip"><strong>{res_df.shape[1] if not res_df.empty else 0}</strong> cột</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if res_df.empty:
+            st.caption("Truy vấn chạy thành công nhưng không có dòng nào trả về.")
+        else:
+            display_df = res_df.copy()
+            if "year" in display_df.columns:
+                display_df["year"] = display_df["year"].apply(
+                    lambda v: str(int(v)) if pd.notna(v) and str(v).strip().lstrip("-").isdigit() else v
+                )
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.download_button(
+                label="Xuất kết quả CSV",
+                data=res_df.to_csv(index=False).encode("utf-8"),
+                file_name="hive_query_result.csv",
+                mime="text/csv",
+                key="hive_download_btn",
+            )
 
 # =============================================================================
-# TAB 5: ARCHITECTURE & DEMO PIPELINE SNAPSHOTS
+# SECTION 5: KIẾN TRÚC — ARCHITECTURE & DEMO PIPELINE
 # =============================================================================
-with tab_architecture:
-    st.markdown('<div class="section-title">🗺️ Kiến trúc Hệ thống Phân tán & Demo Pipeline</div>', unsafe_allow_html=True)
+if show_architecture:
+    st.markdown("""
+    <div class="section-head">
+        <span class="section-num">ARCH</span>
+        <div>
+            <h2>Kiến trúc &amp; luồng dữ liệu</h2>
+            <p>Năm tầng, chạy trong 12 container Docker trên cùng một máy.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("""
-    Hệ thống gồm **11 dịch vụ mặc định** (12 khi bật `spark-worker-2` trong profile `full`, thêm `streaming-consumer` khi dùng profile `streaming`):
-    """)
+    <div class="pipeline five">
+        <div class="pipe-step">
+            <div class="pipe-num">01 · NGUỒN</div>
+            <div class="pipe-title">Dữ liệu arXiv</div>
+            <div class="pipe-desc">Parquet đã tải sẵn, hơn 700 nghìn bài báo.</div>
+        </div>
+        <div class="pipe-step">
+            <div class="pipe-num">02 · XỬ LÝ</div>
+            <div class="pipe-title">Apache Spark</div>
+            <div class="pipe-desc">Batch phân tích và streaming tiêu thụ Kafka.</div>
+        </div>
+        <div class="pipe-step">
+            <div class="pipe-num">03 · LƯU TRỮ</div>
+            <div class="pipe-title">Hadoop HDFS</div>
+            <div class="pipe-desc">Data Lakehouse, phân vùng theo nhóm ngành.</div>
+        </div>
+        <div class="pipe-step">
+            <div class="pipe-num">04 · TRUY VẤN</div>
+            <div class="pipe-title">Apache Hive</div>
+            <div class="pipe-desc">SQL trên HDFS qua HiveServer2.</div>
+        </div>
+        <div class="pipe-step">
+            <div class="pipe-num">05 · HIỂN THỊ</div>
+            <div class="pipe-title">Streamlit</div>
+            <div class="pipe-desc">Dashboard tương tác cho demo.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Container Table
+    st.markdown('<div class="side-label">Mở giao diện dịch vụ</div>', unsafe_allow_html=True)
+    l1, l2, l3, l4 = st.columns(4)
+    with l1:
+        st.link_button("Spark UI", "http://localhost:8080", use_container_width=True)
+    with l2:
+        st.link_button("HDFS UI", "http://localhost:9870", use_container_width=True)
+    with l3:
+        st.link_button("JupyterLab", "http://localhost:8888", use_container_width=True)
+    with l4:
+        st.link_button("Hive Web", "http://localhost:10002", use_container_width=True)
+
     containers_data = [
-        {"Container": "namenode", "Image": "hadoop-namenode:3.2.1", "Port": "9870, 9000", "Chức năng": "Quản lý siêu dữ liệu (metadata) hệ thống file HDFS"},
-        {"Container": "datanode", "Image": "hadoop-datanode:3.2.1", "Port": "9864", "Chức năng": "Lưu trữ các khối dữ liệu phân tán (block storage)"},
-        {"Container": "zookeeper", "Image": "cp-zookeeper:7.6.0", "Port": "2181", "Chức năng": "Quản lý trạng thái và bầu trưởng nhóm cho cụm Kafka"},
-        {"Container": "kafka", "Image": "cp-kafka:7.6.0", "Port": "9092, 29092", "Chức năng": "Hàng đợi thông điệp phân tán cho dữ liệu bài báo"},
-        {"Container": "spark-master", "Image": "bigdata-spark:latest", "Port": "8080, 7077", "Chức năng": "Điều phối tài nguyên tính toán và phân bổ Spark jobs"},
-        {"Container": "spark-worker-1", "Image": "bigdata-spark:latest", "Port": "8081", "Chức năng": "Thực thi tính toán phân tán (2 cores, 2GB RAM)"},
-        {"Container": "spark-worker-2", "Image": "bigdata-spark:latest", "Port": "8082", "Chức năng": "Worker tùy chọn (profile full): 2 cores, 2GB RAM"},
-        {"Container": "spark-jupyter", "Image": "bigdata-spark:latest", "Port": "8888, 4040", "Chức năng": "Môi trường thực hành tương tác 8 Jupyter Notebooks"},
-        {"Container": "hive-server", "Image": "hive:2.3.2", "Port": "10000, 10002", "Chức năng": "HiveServer2 thực thi câu lệnh SQL trên HDFS"},
-        {"Container": "hive-metastore", "Image": "hive:2.3.2", "Port": "9083", "Chức năng": "Dịch vụ quản lý cấu trúc bảng và schema dữ liệu Hive"},
-        {"Container": "hive-metastore-postgresql", "Image": "postgres:9.6", "Port": "5432", "Chức năng": "Cơ sở dữ liệu RDBMS lưu trữ metastore Hive"},
-        {"Container": "dashboard", "Image": "python:3.11-slim", "Port": "8501", "Chức năng": "Bảng điều khiển trực quan tương tác Streamlit"}
+        {"Container": "namenode", "Image": "hadoop-namenode:3.2.1", "Port": "9870, 9000", "Chức năng": "Quản lý metadata HDFS"},
+        {"Container": "datanode", "Image": "hadoop-datanode:3.2.1", "Port": "9864", "Chức năng": "Lưu trữ block dữ liệu"},
+        {"Container": "zookeeper", "Image": "cp-zookeeper:7.6.0", "Port": "2181", "Chức năng": "Điều phối cụm Kafka"},
+        {"Container": "kafka", "Image": "cp-kafka:7.6.0", "Port": "9092, 29092", "Chức năng": "Hàng đợi thông điệp"},
+        {"Container": "spark-master", "Image": "bigdata-spark:latest", "Port": "8080, 7077", "Chức năng": "Điều phối Spark jobs"},
+        {"Container": "spark-worker-1", "Image": "bigdata-spark:latest", "Port": "8081", "Chức năng": "Tính toán phân tán (2 cores)"},
+        {"Container": "spark-worker-2", "Image": "bigdata-spark:latest", "Port": "8082", "Chức năng": "Worker tùy chọn (profile full)"},
+        {"Container": "spark-jupyter", "Image": "bigdata-spark:latest", "Port": "8888, 4040", "Chức năng": "Notebook thực hành"},
+        {"Container": "hive-server", "Image": "hive:2.3.2", "Port": "10000, 10002", "Chức năng": "HiveServer2 - SQL trên HDFS"},
+        {"Container": "hive-metastore", "Image": "hive:2.3.2", "Port": "9083", "Chức năng": "Quản lý schema bảng"},
+        {"Container": "hive-metastore-postgresql", "Image": "postgres:9.6", "Port": "5432", "Chức năng": "Lưu metastore"},
+        {"Container": "dashboard", "Image": "python:3.11-slim", "Port": "8501", "Chức năng": "Dashboard Streamlit"},
     ]
-    st.dataframe(pd.DataFrame(containers_data), use_container_width=True)
+    with st.expander("Chi tiết 12 container"):
+        st.dataframe(pd.DataFrame(containers_data), use_container_width=True, hide_index=True)
 
-    st.markdown("---")
-    st.markdown("#### 🖼️ Sơ đồ Kiến trúc Hệ thống")
-    st.caption("Sơ đồ được vẽ từ cấu hình thực tế trong docker-compose.yml và src, không phải ảnh chụp màn hình.")
-
-    screenshots_catalog = [
-        ("00_pipeline_full_architecture.png", "Kiến trúc Tổng thể",
-         "Luồng batch (Parquet → Spark → HDFS → Hive → Dashboard) và luồng streaming (Producer → Kafka → Spark → HDFS)."),
-    ]
-
-    s_cols = st.columns(2)
-    for s_idx, (s_file, s_title, s_desc) in enumerate(screenshots_catalog):
-        s_target = s_cols[s_idx % 2]
-        s_path = OUTPUT_DIR / "screenshots" / s_file
-        with s_target:
-            st.markdown(f"""
-            <div class="gallery-card">
-                <div class="gallery-title">{s_title}</div>
-                <div class="gallery-caption">{s_desc}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            if s_path.exists():
-                st.image(str(s_path), use_container_width=True)
-            else:
-                st.info(f"Đang đồng bộ ảnh demo: {s_file}")
+    s_path = OUTPUT_DIR / "screenshots" / "00_pipeline_full_architecture.png"
+    with st.expander("Sơ đồ kiến trúc chi tiết"):
+        if s_path.exists():
+            st.image(str(s_path), use_container_width=True)
+        else:
+            st.info("Đang đồng bộ ảnh kiến trúc: 00_pipeline_full_architecture.png")
 
 # -----------------------------------------------------------------------------
 # 6. FOOTER
 # -----------------------------------------------------------------------------
-st.markdown("---")
 st.markdown("""
-<div style="text-align: center; color: #64748b; font-size: 0.82rem; padding: 12px;">
-    🌌 <b>arXiv Big Data Studio</b> — Bài tập lớn môn Xử lý Dữ liệu lớn (Big Data)<br/>
-    Kết quả trong <code>output/analysis_results/</code> và báo cáo <code>output/reports/BAO_CAO_BAI_TAP_LON_BIGDATA.md</code><br/>
-    Apache Spark 3.5.3 · Hadoop HDFS · Kafka · Hive · Streamlit
+<div class="app-footer">
+    <b>CogAI Lab</b> · arXiv Big Data Demo<br/>
+    Kafka → Spark Streaming → HDFS → Hive → Streamlit
 </div>
 """, unsafe_allow_html=True)
+

@@ -57,8 +57,8 @@ def refresh_all_partitions():
     refresh_historical_partitions()
     refresh_stream_partitions()
     return {
-        "historical": int(query_hive("SELECT COUNT(*) AS rows FROM arxiv_historical").iloc[0, 0]),
-        "stream": int(query_hive("SELECT COUNT(*) AS rows FROM arxiv_stream").iloc[0, 0]),
+        "historical": int(query_hive("SELECT COUNT(*) AS row_count FROM arxiv_historical").iloc[0, 0]),
+        "stream": int(query_hive("SELECT COUNT(*) AS row_count FROM arxiv_stream").iloc[0, 0]),
     }
 
 

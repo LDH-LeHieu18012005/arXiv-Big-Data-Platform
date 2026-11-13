@@ -351,8 +351,8 @@ class PublishedArtifacts(unittest.TestCase):
 
     def test_dashboard_matches_published_schema(self):
         source = (ROOT / "src" / "dashboard_app.py").read_text(encoding="utf-8")
-        for required in ('yearly["count"]', 'yoy_growth_rate', 'percentage_share',
-                         "10_validated_trend.png", "refresh_all_partitions"):
+        for required in ('yearly["count"]', 'yoy_growth_rate', 'field_trends.parquet',
+                         'main_group', "refresh_all_partitions"):
             self.assertIn(required, source)
         for stale in ("trend_forecast_2030", "19 năm", "7.82", "paper_count\"]"):
             self.assertNotIn(stale, source)

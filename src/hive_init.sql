@@ -13,12 +13,24 @@ CREATE EXTERNAL TABLE arxiv_historical (
 ) PARTITIONED BY (year INT)
 STORED AS PARQUET LOCATION 'hdfs://namenode:9000/data/arxiv_clean_v2';
 DROP TABLE IF EXISTS arxiv_stream;
+-- Column order below matches the Parquet files written by spark_streaming_consumer.py.
 CREATE EXTERNAL TABLE arxiv_stream (
  id STRING, title STRING, authors STRING, categories STRING, abstract STRING,
- year INT, submitted_at STRING, primary_category STRING, main_group STRING, `timestamp` DOUBLE,
- clean_abstract STRING, abstract_tokens ARRAY<STRING>, processed_time TIMESTAMP
+ submitted_at STRING, `timestamp` DOUBLE, year INT, primary_category STRING,
+ main_group STRING, clean_abstract STRING, abstract_tokens ARRAY<STRING>,
+ processed_time TIMESTAMP
 ) PARTITIONED BY (main_group_clean STRING)
 STORED AS PARQUET LOCATION 'hdfs://namenode:9000/data/arxiv_stream_v2';
+DROP TABLE IF EXISTS arxiv_stream_rejects;
+-- Quarantine sink written by spark_streaming_consumer.py: same columns as arxiv_stream
+-- (year kept as supplied), plus the rejection reason.
+CREATE EXTERNAL TABLE arxiv_stream_rejects (
+ id STRING, title STRING, authors STRING, categories STRING, abstract STRING,
+ submitted_at STRING, supplied_year INT, `timestamp` DOUBLE, year INT,
+ primary_category STRING, main_group STRING, clean_abstract STRING,
+ abstract_tokens ARRAY<STRING>, reject_reason STRING, processed_time TIMESTAMP,
+ main_group_clean STRING
+) STORED AS PARQUET LOCATION 'hdfs://namenode:9000/data/arxiv_stream_rejects_v2';
 DROP TABLE IF EXISTS hot_keyword_trends;
 CREATE EXTERNAL TABLE hot_keyword_trends (
  year INT, word STRING, frequency BIGINT, document_count BIGINT,

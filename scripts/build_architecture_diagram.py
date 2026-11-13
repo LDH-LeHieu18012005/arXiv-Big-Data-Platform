@@ -83,13 +83,13 @@ for x in x_positions[:-1]:
 axes.add_patch(FancyBboxPatch((0.065, 0.075), 0.43, 0.10,
                               boxstyle="round,pad=0.008,rounding_size=0.012",
                               linewidth=0, facecolor=LIGHT))
-axes.text(0.28, 0.125, "Kiểm soát chất lượng: năm nộp v1 · chống trùng ID · manifest",
-          ha="center", va="center", fontsize=9.5, color=NAVY)
+axes.text(0.28, 0.125, "Kiểm soát chất lượng: năm nộp v1 · trùng ID · manifest",
+          ha="center", va="center", fontsize=9.0, color=NAVY)
 axes.add_patch(FancyBboxPatch((0.535, 0.075), 0.435, 0.10,
                               boxstyle="round,pad=0.008,rounding_size=0.012",
                               linewidth=0, facecolor=LIGHT))
-axes.text(0.7525, 0.125, "Docker Compose: 11 dịch vụ mặc định",
-          ha="center", va="center", fontsize=9.5, color=NAVY)
+axes.text(0.7525, 0.125, "Docker Compose: 12 dịch vụ · streaming bật bằng profile",
+          ha="center", va="center", fontsize=8.6, color=NAVY)
 
 axes.text(0.955, 0.012,
           "Vẽ từ docker-compose.yml và src; không chứa số liệu hiệu năng hay trạng thái giả lập.",

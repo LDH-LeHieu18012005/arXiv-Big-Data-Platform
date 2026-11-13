@@ -217,12 +217,14 @@ services:
       - ./src:/app/src
       - ./output:/app/output
       - ./data:/app/data
+      - ./.streamlit:/app/.streamlit:ro
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - KAFKA_TOPIC=arxiv-papers-v2
       - HIVE_HOST=hive-server
       - HIVE_PORT=10000
       - HDFS_NAMENODE=hdfs://namenode:9000
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
     depends_on:
       - kafka
       - hive-server
