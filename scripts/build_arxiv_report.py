@@ -400,8 +400,9 @@ def glossary(doc):
         ("Hive Metastore", "Kho metadata lưu định nghĩa database, bảng, cột và partition của Hive."),
         ("External table", "Bảng Hive chỉ quản lý metadata, dữ liệu vẫn nằm trên HDFS."),
         ("Partition", "Cách chia dữ liệu theo giá trị của một cột (ví dụ năm hoặc nhóm ngành)."),
-        ("LDA", "Latent Dirichlet Allocation – mô hình chủ đề xác suất."),
-        ("Perplexity", "Chỉ số đo mức độ phù hợp của mô hình chủ đề với dữ liệu kiểm định."),
+        ("K-Means", "Thuật toán gom nhóm: mỗi bài được xếp vào cụm có tâm gần nhất."),
+        ("TF-IDF", "Cách chuyển văn bản thành vector số: từ xuất hiện nhiều trong một bài nhưng hiếm ở các bài khác thì có trọng số cao."),
+        ("R²", "Hệ số xác định của hồi quy, từ 0 đến 1; càng gần 1 thì đường thẳng càng khớp dữ liệu."),
         ("Data contract", "Bộ quy tắc dùng chung cho batch và streaming để dữ liệu nhất quán."),
         ("Quarantine", "Vùng cách ly chứa các bản ghi lỗi, tách khỏi luồng dữ liệu hợp lệ."),
         ("Idempotent", "Thao tác chạy lại nhiều lần vẫn cho cùng một kết quả."),
@@ -427,8 +428,8 @@ def figures_index(doc, pages):
         "Hình 4.7. Đám mây từ khóa theo nhóm ngành",
         "Hình 4.8. Mười lăm tác giả có nhiều bài nhất",
         "Hình 4.9. Xu hướng hợp tác tác giả",
-        "Hình 4.10. Mười chủ đề LDA và tỷ lệ xuất hiện",
-        "Hình 4.11. Kiểm định ngoại suy xu hướng từ khóa",
+        "Hình 4.10. Mười cụm K-Means và tỷ lệ bài",
+        "Hình 4.11. Đường hồi quy tuyến tính và dự báo xu hướng từ khóa",
         "Hình 4.12. So sánh các nhóm ngành theo bốn chỉ số",
         "Hình 5.1. Tab Tổng quan của dashboard",
         "Hình 5.2. Tab Gửi dữ liệu – Kafka Ingestion Studio",
@@ -458,8 +459,8 @@ def tables_index(doc, pages):
         "Bảng 4.4. Mười chuyên ngành hàng đầu",
         "Bảng 4.5. Từ khóa công nghệ trên 1.000 bài năm 2015",
         "Bảng 4.6. Mười lăm tác giả có nhiều bài nhất",
-        "Bảng 4.7. Mười chủ đề LDA",
-        "Bảng 4.8. Kết quả kiểm định ngoại suy",
+        "Bảng 4.7. Mười cụm K-Means",
+        "Bảng 4.8. Kết quả hồi quy tuyến tính",
         "Bảng 4.9. Sự kiện streaming theo nhóm ngành",
         "Bảng 5.1. Danh mục kiểm chứng end-to-end",
     ]
@@ -498,7 +499,7 @@ def introduction(doc):
         "Thiết kế bộ quy tắc dữ liệu (data contract) dùng chung cho batch và streaming, đặc biệt là quy tắc xác định "
         "năm nộp bài theo phiên bản v1 và kiểm tra chéo với mã arXiv.",
         "Tính các chỉ số phân tích: tăng trưởng theo năm, cơ cấu nhóm ngành, xếp hạng chuyên ngành, từ khóa công nghệ, "
-        "tác giả và mô hình chủ đề LDA.",
+        "tác giả và mô hình phân nhóm K-Means.",
         "Xây dựng nhánh streaming bằng Kafka và Spark Structured Streaming, có checkpoint và cơ chế cách ly bản ghi "
         "lỗi để luồng không bị dừng.",
         "Tạo lớp kho dữ liệu Hive gồm các bảng external và view, cho phép truy vấn SQL trực tiếp trên HDFS.",
@@ -517,7 +518,7 @@ def introduction(doc):
         "để kết luận xu hướng.",
         "Về tài nguyên: hệ thống chạy trên một máy cá nhân với Docker Desktop, 12 container chia sẻ CPU và RAM. Các phép "
         "đo thời gian phản ánh xu hướng, không phải benchmark chuẩn của một cụm thật.",
-        "Về mô hình: chỉ dùng các thuật toán có sẵn trong Spark MLlib, không huấn luyện mô hình ngôn ngữ lớn. LDA được "
+        "Về mô hình: chỉ dùng các thuật toán có sẵn trong Spark MLlib, không huấn luyện mô hình ngôn ngữ lớn. K-Means được "
         "huấn luyện trên mẫu tất định 200.181 bài để vừa tài nguyên.",
         "Về ngôn ngữ: dữ liệu là tiếng Anh; quy tắc tách từ và danh sách stopword chỉ áp dụng cho tiếng Anh.",
     ]:
@@ -548,7 +549,7 @@ def chapter1(doc):
          "nghiên cứu, đồng thời tiếp nhận được bài báo mới theo thời gian thực.")
     body(doc, "Đầu vào là các bản ghi có các trường id, title, abstract, authors, categories, versions và update_date. "
          "Đầu ra gồm: (i) bảng sạch trên HDFS; (ii) các bảng phân tích theo năm, theo nhóm ngành, theo chuyên ngành, "
-         "theo từ khóa và theo tác giả; (iii) mô hình chủ đề LDA; (iv) kết quả kiểm định ngoại suy; (v) kho dữ liệu "
+         "theo từ khóa và theo tác giả; (iii) mô hình phân nhóm K-Means; (iv) kết quả hồi quy và dự báo xu hướng; (v) kho dữ liệu "
          "Hive cho phép truy vấn SQL; và (vi) dashboard trực quan.")
     body(doc, "Điểm khó của bài toán không nằm ở từng phép tính, mà ở chỗ các phép tính phải nhất quán với nhau trên "
          "cùng một định nghĩa dữ liệu. Ví dụ, nếu bước batch tính năm theo ngày tạo phiên bản v1 nhưng bước streaming "
@@ -615,7 +616,7 @@ def chapter1(doc):
         "Giai đoạn 1 – Tải dữ liệu: tải hai shard, ghi source_manifest.json với revision, dung lượng và SHA-256.",
         "Giai đoạn 2 – Khảo sát dữ liệu: kiểm tra lược đồ, số dòng, khoảng năm, các trường thiếu và phân bố ban đầu.",
         "Giai đoạn 3 – Tiền xử lý: áp dụng data contract, tạo cột dẫn xuất, tách từ và ghi Parquet sạch.",
-        "Giai đoạn 4 – Phân tích: tính các bảng theo năm, nhóm ngành, chuyên ngành, từ khóa, tác giả và huấn luyện LDA.",
+        "Giai đoạn 4 – Phân tích: tính các bảng theo năm, nhóm ngành, chuyên ngành, từ khóa, tác giả và huấn luyện K-Means.",
         "Giai đoạn 5 – Trực quan hóa: sinh 12 biểu đồ PNG từ kết quả phân tích.",
         "Giai đoạn 6 – Streaming: dựng Kafka, producer và Spark Structured Streaming ghi xuống HDFS.",
         "Giai đoạn 7 – Kho dữ liệu và dashboard: tạo bảng Hive, view và dashboard Streamlit năm tab.",
@@ -716,7 +717,7 @@ def chapter2(doc):
     h3(doc, "2.3.3. Làm sạch và tách từ")
     body(doc, "Tóm tắt được chuyển về chữ thường, thay mọi ký tự không phải chữ cái, chữ số, khoảng trắng hoặc dấu gạch "
          "nối bằng khoảng trắng, rồi tách theo khoảng trắng với độ dài tối thiểu ba ký tự. Danh sách stopword tiếng "
-         "Anh của Spark MLlib được loại bỏ. Kết quả là một mảng token dùng cho thống kê từ khóa và cho LDA. Việc giữ "
+         "Anh của Spark MLlib được loại bỏ. Kết quả là một mảng token dùng cho thống kê từ khóa và cho mô hình phân nhóm. Việc giữ "
          "lại cả clean_abstract và abstract_tokens cho phép dashboard so sánh trực quan giữa dữ liệu thô, dữ liệu sạch "
          "và số token.")
 
@@ -741,18 +742,22 @@ def chapter2(doc):
     body(doc, "Số bài theo năm được tính bằng groupBy(year). Tăng trưởng so với năm trước dùng hàm lag trên window sắp "
          "theo năm: yoy = (count_n / count_{n-1} - 1) × 100. Hàm with_growth được viết để mọi năm trong khoảng đều "
          "xuất hiện, kể cả năm không có bài, tránh việc biểu đồ nối sai hai năm cách xa nhau.")
-    h3(doc, "2.4.2. Mô hình chủ đề LDA")
-    body(doc, "LDA là mô hình sinh xác suất, giả định mỗi văn bản là hỗn hợp của K chủ đề và mỗi chủ đề là phân bố trên "
-         "từ vựng. Đề tài dùng CountVectorizer với từ điển 10.000 từ, áp dụng IDF để giảm trọng số các từ quá phổ "
-         "biến, rồi huấn luyện LDA với K = 10. Tập huấn luyện và kiểm định được chia tất định theo id bài để bảo đảm "
-         "chạy lại cho cùng kết quả; mỗi phía được lấy mẫu tối đa 200.000 và 50.000 bài để vừa tài nguyên.")
-    body(doc, "Chất lượng mô hình được đánh giá bằng log-perplexity trên tập kiểm định. Giá trị càng thấp càng tốt; "
-         "kết quả 7,7619 được dùng làm chỉ số tham chiếu khi so sánh các cấu hình K khác nhau.")
-    h3(doc, "2.4.3. Kiểm định ngoại suy xu hướng")
-    body(doc, "Trước khi công bố một dự báo, đề tài kiểm tra xem phương pháp dự báo có thực sự tốt hơn baseline hay "
-         "không. Cách làm: huấn luyện trên giai đoạn 2007–2012, dự báo ba năm 2013–2015, so sánh sai số tuyệt đối "
-         "trung bình (MAE) với baseline “giữ nguyên giá trị năm cuối”. Nếu MAE của mô hình nhỏ hơn baseline, dự báo "
-         "được chấp nhận; ngược lại, báo cáo nêu rõ là không đủ cơ sở.")
+    h3(doc, "2.4.2. Mô hình phân nhóm K-Means")
+    body(doc, "K-Means là thuật toán gom nhóm đơn giản: mỗi bài được biểu diễn bằng vector TF-IDF 10.000 chiều, chuẩn "
+         "hóa độ dài để bài dài không lấn át bài ngắn, rồi xếp vào cụm có tâm gần nhất [7], [14]. Đề tài đặt K = 10 và "
+         "huấn luyện trên 200.181 bài; 50.013 bài khác được giữ riêng theo cách chia tất định theo mã bài, không tham "
+         "gia học từ điển, IDF hay tâm cụm. Kết quả là mười nhóm bài có "
+         "từ khóa giống nhau, kèm tỷ lệ bài trong mỗi nhóm; cách giải thích này gần với việc xếp sách vào kệ theo chủ đề.")
+    body(doc, "Độ gọn của các cụm được đo bằng tổng bình phương khoảng cách từ mỗi bài đến tâm cụm (WSSE). Trên tập "
+         "huấn luyện, bình phương khoảng cách trung bình mỗi bài là 0,972 (với vector đã chuẩn hóa độ dài, giá trị này "
+         "nằm trong khoảng 0 đến 2); chỉ số càng nhỏ thì các bài trong cụm càng sát nhau. Lần chạy này chỉ dùng K = 10; "
+         "chỉ số trên có thể dùng để so sánh khi thử thêm các giá trị K khác.")
+    h3(doc, "2.4.3. Hồi quy tuyến tính và dự báo xu hướng")
+    body(doc, "Hồi quy tuyến tính thường (ordinary least squares) tìm đường thẳng đi qua các điểm tần suất theo năm sao "
+         "cho tổng bình phương sai lệch là nhỏ nhất. Đề tài dùng chuỗi 2008–2015 (bỏ 2007 và 2016 vì dữ liệu không đầy "
+         "đủ), tính hệ số xác định R² (từ 0 đến 1, càng gần 1 thì đường thẳng càng khớp) và chỉ dự báo ba năm 2017–2019 "
+         "khi R² ≥ 0,5. Để kiểm tra chéo, mô hình còn được huấn luyện trên 2008–2012 và so sai số tuyệt đối trung bình "
+         "(MAE) với ba năm 2013–2015; MAE được báo cáo kèm để người đọc thấy sai số thực tế.")
     h2(doc, "2.5. Dashboard và các chỉ số vận hành")
     body(doc, "Dashboard là lớp giao diện cuối cùng, nhưng không chỉ để trình bày. Nó còn là công cụ vận hành: hiển thị "
          "trạng thái bốn dịch vụ (Kafka, HDFS, Hive, Spark), cho phép gửi một bài báo hoặc phát lại hàng loạt, duyệt "
@@ -765,7 +770,7 @@ def chapter2(doc):
     table(doc, "Bảng 2.2. Thành phần công nghệ và phiên bản sử dụng",
           ["Thành phần", "Phiên bản", "Vai trò trong hệ thống"],
           [("Hadoop HDFS", "3.2.1", "Lưu trữ phân tán cho batch và streaming"),
-           ("Apache Spark", "3.5.3", "Tiền xử lý, phân tích, streaming, LDA"),
+           ("Apache Spark", "3.5.3", "Tiền xử lý, phân tích, streaming, K-Means"),
            ("Apache Kafka", "7.6.0 (Confluent)", "Hàng đợi sự kiện bài báo mới"),
            ("Apache Hive", "2.3.2", "Kho dữ liệu SQL trên HDFS"),
            ("PostgreSQL (metastore)", "2.3.0", "Lưu metadata của Hive"),
@@ -829,11 +834,11 @@ def chapter3(doc):
     h3(doc, "3.3.2. Phân tích")
     body(doc, "Giai đoạn analyze tính chín bảng kết quả: tăng trưởng theo năm, xu hướng theo nhóm ngành, chuyên ngành "
          "theo năm, từ khóa công nghệ, chỉ số theo nhóm, thuật ngữ theo nhóm, thuật ngữ hàng đầu, tác giả hàng đầu "
-         "và xu hướng tác giả. Riêng bảng từ khóa phải quét toàn bộ 704.329 tóm tắt nên tốn 110,13 giây, chiếm phần "
+         "và xu hướng tác giả. Riêng bảng từ khóa phải quét toàn bộ 704.329 tóm tắt nên tốn 99,53 giây, chiếm phần "
          "lớn thời gian phân tích.")
-    body(doc, "Mô hình LDA được huấn luyện trong cùng giai đoạn nhưng có thể bỏ qua bằng tham số --skip-topics khi chỉ "
-         "cần các bảng thống kê. Kết quả chủ đề được ghi vào topics.json, kèm trọng số từ và tỷ lệ xuất hiện của "
-         "từng chủ đề.")
+    body(doc, "Mô hình K-Means được huấn luyện trong cùng giai đoạn nhưng có thể bỏ qua bằng tham số --skip-clusters khi chỉ "
+         "cần các bảng thống kê. Kết quả cụm được ghi vào clusters.json, kèm từ khóa đại diện và tỷ lệ xuất hiện của "
+         "từng cụm.")
     h3(doc, "3.3.3. Đồng bộ HDFS")
     body(doc, "Giai đoạn sync-hdfs ghi dữ liệu sạch vào /data/arxiv_clean_v2, phân vùng theo năm, và ghi bảng từ khóa "
          "vào /data/hot_keyword_trends_v2. Mỗi thư mục partition có tệp _SUCCESS để các bước sau biết dữ liệu đã "
@@ -844,10 +849,10 @@ def chapter3(doc):
     table(doc, "Bảng 3.3. Các giai đoạn của luồng batch và thời gian chạy",
           ["Giai đoạn", "Nội dung", "Thời gian (giây)"],
           [("preprocess", "Đọc 704.329 bản ghi, áp dụng data contract, ghi Parquet", "129,90"),
-           ("analyze", "Chín bảng phân tích + LDA", "464,69"),
-           ("— trong đó LDA", "CountVectorizer, IDF, LDA K=10, đánh giá perplexity", "280,18"),
+           ("analyze", "Chín bảng phân tích + K-Means", "224,05"),
+           ("— trong đó K-Means", "TF-IDF 10.000 từ, K-Means K=10", "58,28"),
            ("sync-hdfs", "Ghi Parquet phân vùng lên HDFS, MSCK REPAIR", "—"),
-           ("Tổng (không tính sync)", "Preprocess + analyze", "594,59")],
+           ("Tổng (không tính sync)", "Preprocess + analyze", "353,96")],
           [4.0, 8.4, 3.1], numeric=(2,))
 
     h2(doc, "3.4. Luồng streaming")
@@ -891,7 +896,7 @@ def chapter3(doc):
          "dùng hiệu ứng phát sáng. Cách thiết kế này tránh cảm giác “các nút rời rạc” và giữ được sự nhất quán với "
          "hệ thống màu sáng của toàn dashboard.")
     for text in [
-        "Tổng quan: bốn thẻ chỉ số (704.329 bài, giai đoạn 2007–2016, 8 nhóm ngành, 10 chủ đề LDA), biểu đồ tăng trưởng "
+        "Tổng quan: bốn thẻ chỉ số (704.329 bài, giai đoạn 2007–2016, 8 nhóm ngành, 10 cụm K-Means), biểu đồ tăng trưởng "
         "theo năm, cơ cấu nhóm ngành và ba điểm chính để trình bày.",
         "Gửi dữ liệu: form gửi một bài báo mới vào Kafka, nút phát lại hàng loạt từ Parquet và nhật ký phiên hiện tại. "
         "Mỗi sự kiện ghi lại partition, offset và trạng thái ACK.",
@@ -963,8 +968,8 @@ def chapter4(doc):
            ("Số nhóm ngành", "8"),
            ("Số bài có năm v1 khác năm mã", "2.323"),
            ("Thời gian tiền xử lý", "129,90 giây"),
-           ("Thời gian phân tích", "464,69 giây"),
-           ("Mô hình LDA", "K=10, từ điển 10.000, log-perplexity 7,7619")],
+           ("Thời gian phân tích", "224,05 giây"),
+           ("Mô hình K-Means", "K=10, từ điển 10.000, bình phương khoảng cách trung bình 0,972")],
           [7.5, 8.0])
 
     h2(doc, "4.2. Tăng trưởng theo năm")
@@ -1021,11 +1026,12 @@ def chapter4(doc):
     h2(doc, "4.5. Từ khóa công nghệ")
     body(doc, "Bảng 4.5 chuẩn hóa số bài chứa từ khóa trên 1.000 bài của năm 2015 để so sánh được giữa các từ có tần "
          "suất rất khác nhau. quantum dẫn đầu với 98,33 bài trên 1.000 bài — gần 10% số bài năm 2015 có nhắc tới "
-         "quantum. graph đứng thứ hai với 32,92, tiếp theo là diffusion 17,28, neural 14,02 và attention 13,98. "
-         "transformer chỉ đạt 0,27, phản ánh đúng thời điểm: năm 2015 bài báo về kiến trúc này còn rất ít.")
+         "quantum. graph đứng thứ hai với 32,92, tiếp theo là deep 18,69, diffusion 17,28, neural 14,02 và attention "
+         "13,98. transformer chỉ đạt 0,27; đây không phải kiến trúc Transformer (công bố năm 2017) mà là nghĩa kỹ thuật "
+         "khác của từ, nên không dùng để kết luận về xu hướng học sâu.")
     table(doc, "Bảng 4.5. Từ khóa công nghệ trên 1.000 bài năm 2015",
           ["Từ khóa", "Số bài chứa", "Trên 1.000 bài"],
-          [("quantum", "10.324", "98,33"), ("graph", "3.456", "32,92"),
+          [("quantum", "10.324", "98,33"), ("graph", "3.456", "32,92"), ("deep", "1.962", "18,69"),
            ("diffusion", "1.814", "17,28"), ("neural", "1.472", "14,02"),
            ("attention", "1.468", "13,98"), ("transformer", "28", "0,27")],
           [4.6, 5.4, 5.5], numeric=(1, 2))
@@ -1049,39 +1055,41 @@ def chapter4(doc):
     figure(doc, "09_top_authors.png", "Hình 4.8. Mười lăm tác giả có nhiều bài nhất", 15.0)
     figure(doc, "08_author_collaboration_trend.png", "Hình 4.9. Xu hướng hợp tác tác giả", 15.0)
 
-    h2(doc, "4.7. Mô hình chủ đề LDA")
-    body(doc, "LDA với 10 chủ đề tách được các cụm ngữ nghĩa khá rõ: chủ đề 4 tập trung vào sao và quan sát thiên văn "
-         "(stars, emission, x-ray), chủ đề 3 vào vật lý lượng tử và từ tính (quantum, phase, magnetic), chủ đề 8 vào "
-         "thiên hà (galaxies, cluster, redshift). Hai chủ đề lớn nhất (T1 và T2, mỗi chủ đề gần 19%) là các chủ đề "
-         "phương pháp luận chung, phản ánh việc mô hình chưa tách hoàn toàn ngôn ngữ học thuật phổ biến khỏi nội dung "
-         "chuyên ngành.")
-    table(doc, "Bảng 4.7. Mười chủ đề LDA",
-          ["Chủ đề", "Thuật ngữ đại diện", "Tỷ lệ (%)"],
-          [("T0", "model, higgs, channel, new, standard", "3,83"),
-           ("T1", "model, data, paper, algorithm, problem", "18,58"),
-           ("T2", "show, space, group, also, paper", "18,85"),
-           ("T3", "quantum, phase, magnetic, state, states", "13,69"),
-           ("T4", "stars, star, emission, observations, x-ray", "7,77"),
-           ("T5", "equation, theory, model, equations, quantum", "13,99"),
-           ("T6", "alpha, lambda, gamma, graph, delta", "5,51"),
-           ("T7", "field, magnetic, model, matter, dark", "5,46"),
-           ("T8", "galaxies, galaxy, mass, cluster, clusters", "3,72"),
-           ("T9", "data, energy, results, model, using", "8,59")],
+    h2(doc, "4.7. Mô hình phân nhóm K-Means")
+    body(doc, "K-Means với 10 cụm cho thấy các nhóm bài bám khá sát chuyên ngành. Cụm lớn nhất C1 (26,6%) gồm ngôn ngữ "
+         "chung của bài báo (model, theory, models); C2 (17,5%) là toán thuần túy (group, prove, mathbb); C4 (11,4%) là "
+         "khoa học máy tính (algorithm, network, networks). Các cụm còn lại ứng với thiên văn (C0: galaxies, stars), "
+         "vật liệu (C3: graphene, optical), vật lý lượng tử (C8: quantum, states), vật lý hạt (C6: higgs, dark), "
+         "phương trình (C5: equation, solutions), từ tính (C9: magnetic, spin) và hố đen (C7: black, hole). Vì mỗi bài "
+         "chỉ thuộc một cụm, cách phân nhóm này dễ giải thích nhưng không thể hiện một bài thuộc nhiều chủ đề.")
+    table(doc, "Bảng 4.7. Mười cụm K-Means",
+          ["Cụm", "Thuật ngữ đại diện", "Tỷ lệ (%)"],
+          [("C0", "galaxies, stars, star, emission, stellar", "9,42"),
+           ("C1", "model, theory, models, time, results", "26,58"),
+           ("C2", "group, prove, mathbb, algebra, groups", "17,48"),
+           ("C3", "graphene, optical, electron, laser, frequency", "8,42"),
+           ("C4", "algorithm, network, networks, problem, algorithms", "11,42"),
+           ("C5", "equation, solutions, equations, solution, boundary", "6,10"),
+           ("C6", "higgs, dark, neutrino, mass, production", "7,18"),
+           ("C7", "black, hole, holes, horizon, gravity", "1,34"),
+           ("C8", "quantum, states, phase, state, transition", "8,14"),
+           ("C9", "magnetic, spin, field, fields, temperature", "3,92")],
           [2.2, 9.8, 3.5], numeric=(0, 2))
-    figure(doc, "12_lda_topic_bubble.png", "Hình 4.10. Mười chủ đề LDA và tỷ lệ xuất hiện", 14.6)
+    figure(doc, "12_kmeans_clusters.png", "Hình 4.10. Mười cụm K-Means và tỷ lệ bài", 14.6)
 
-    h2(doc, "4.8. Kiểm định ngoại suy")
-    body(doc, "Bốn từ khóa được kiểm định trên giai đoạn 2013–2015 với mô hình huấn luyện đến hết 2012. Cả bốn đều "
-         "vượt baseline, tức là đường xu hướng tuyến tính dự báo tốt hơn việc giữ nguyên giá trị năm cuối. Mức cải "
-         "thiện lớn nhất thuộc về quantum (MAE 0,813 so với 4,029) và attention (0,418 so với 1,877).")
-    table(doc, "Bảng 4.8. Kết quả kiểm định ngoại suy",
-          ["Từ khóa", "MAE mô hình", "MAE baseline", "Kết luận"],
-          [("transformer", "0,069", "0,091", "Chấp nhận"),
-           ("attention", "0,418", "1,877", "Chấp nhận"),
-           ("diffusion", "0,237", "0,910", "Chấp nhận"),
-           ("quantum", "0,813", "4,029", "Chấp nhận")],
+    h2(doc, "4.8. Hồi quy tuyến tính và dự báo xu hướng")
+    body(doc, "Bốn từ khóa được hồi quy trên chuỗi 2008–2015. quantum có R² = 0,98 và giảm đều (MAE 0,81); attention "
+         "tăng với R² = 0,90 (MAE 0,42); diffusion tăng với R² = 0,85 (MAE 0,24). transformer chỉ đạt R² = 0,43 vì "
+         "chuỗi tăng không đều, nên báo cáo chỉ mô tả chứ không dự báo. Với ba từ khóa đạt ngưỡng, dự báo 2017–2019 là: "
+         "attention 14,7 → 16,0; diffusion 18,3 → 19,1; quantum 93,7 → 89,9 bài trên 1.000 bài.")
+    table(doc, "Bảng 4.8. Kết quả hồi quy tuyến tính",
+          ["Từ khóa", "R²", "MAE", "Kết luận"],
+          [("quantum", "0,98", "0,81", "Dự báo"),
+           ("attention", "0,90", "0,42", "Dự báo"),
+           ("diffusion", "0,85", "0,24", "Dự báo"),
+           ("transformer", "0,43", "0,07", "Chỉ mô tả")],
           [4.3, 3.7, 3.7, 3.8], numeric=(1, 2))
-    figure(doc, "10_validated_trend.png", "Hình 4.11. Kiểm định ngoại suy xu hướng từ khóa", 15.0)
+    figure(doc, "10_linear_regression_trend.png", "Hình 4.11. Đường hồi quy tuyến tính và dự báo xu hướng từ khóa", 15.0)
     figure(doc, "11_field_radar_comparison.png", "Hình 4.12. So sánh các nhóm ngành theo bốn chỉ số", 14.6)
 
     h2(doc, "4.9. Kết quả streaming")
@@ -1097,16 +1105,16 @@ def chapter4(doc):
           [5.2, 5.0, 5.3], numeric=(1, 2))
 
     h2(doc, "4.10. Hiệu năng")
-    body(doc, "Tổng thời gian xử lý batch là 594,59 giây, tức khoảng 9,9 phút cho 704.329 bài. Tính theo số dòng, "
-         "bước tiền xử lý đạt khoảng 5.421 dòng/giây; bước phân tích chậm hơn nhiều vì phải quét toàn bộ tóm tắt "
-         "cho thống kê từ khóa (110,13 giây) và huấn luyện LDA (280,18 giây). Trên một máy cá nhân chạy 12 container, "
+    body(doc, "Tổng thời gian xử lý batch là 353,96 giây, tức khoảng 5,9 phút cho 704.329 bài. Tính theo số dòng, "
+         "bước tiền xử lý đạt khoảng 5.422 dòng/giây; bước phân tích chậm hơn nhiều vì phải quét toàn bộ tóm tắt "
+         "cho thống kê từ khóa (99,53 giây) và huấn luyện K-Means (58,28 giây). Trên một máy cá nhân chạy 12 container, "
          "con số này là chấp nhận được cho mục đích học tập và demo.")
     body(doc, "Thời gian streaming phụ thuộc vào kích thước micro-batch. Với trigger 5 giây, một micro-batch chứa vài "
          "chục bản ghi được xử lý trong khoảng 1–3 giây, bao gồm cả thời gian ghi Parquet và cập nhật checkpoint.")
 
     h2(doc, "4.11. Kết chương")
     body(doc, "Chương này đã trình bày kết quả thực nghiệm: quy mô dữ liệu, tăng trưởng theo năm, cơ cấu ngành, "
-         "chuyên ngành hàng đầu, từ khóa, tác giả, chủ đề LDA, kiểm định ngoại suy và kết quả streaming. Các con số "
+         "chuyên ngành hàng đầu, từ khóa, tác giả, cụm K-Means, hồi quy và dự báo xu hướng, kết quả streaming. Các con số "
          "đều gắn với mã lần chạy và có thể kiểm chứng lại. Chương 5 trình bày quy trình kiểm chứng end-to-end, "
          "đánh giá ưu nhược điểm và hướng phát triển.")
 
@@ -1174,7 +1182,7 @@ def chapter5(doc):
         "Phân giải tác giả: thống kê theo chuỗi tên, chưa phân giải thực thể, nên các tên phổ biến bị cộng gộp và "
         "các hợp tác lớn được tính như một tác giả.",
         "Từ khóa cố định: danh sách 16 từ khóa được chọn trước, chưa phát hiện cụm từ mới hay từ đồng nghĩa.",
-        "LDA lấy mẫu: huấn luyện trên 200.181 bài thay vì toàn bộ, nên chủ đề có thể bỏ sót các cụm nhỏ.",
+        "K-Means lấy mẫu: huấn luyện trên 200.181 bài thay vì toàn bộ, nên vài cụm nhỏ có thể bị gộp hoặc bỏ sót.",
         "Hiệu năng: các phép đo chịu ảnh hưởng của việc 12 container chia sẻ tài nguyên một máy, không phải benchmark "
         "của cụm thật.",
         "Luồng streaming: số sự kiện còn nhỏ (57), chưa kiểm tra được hành vi dưới tải cao hoặc khi Kafka mất "
@@ -1210,7 +1218,7 @@ def conclusion(doc):
     for text in [
         "Xử lý 704.329 bài báo từ 543,0 MiB dữ liệu thô, làm sạch không loại bản ghi nào, ghi 615,6 MB Parquet phân "
         "vùng lên HDFS.",
-        "Sinh chín bảng phân tích, 12 biểu đồ và một mô hình LDA 10 chủ đề với log-perplexity kiểm định 7,7619.",
+        "Sinh chín bảng phân tích, 12 biểu đồ và một mô hình K-Means 10 cụm với bình phương khoảng cách trung bình 0,972.",
         "Xây dựng luồng streaming Kafka → Spark → HDFS với checkpoint và vùng cách ly, đã kiểm chứng bằng cả bản ghi "
         "hợp lệ lẫn bản ghi lỗi.",
         "Tạo kho dữ liệu Hive với hai bảng external, một bảng từ khóa và ba view; dashboard năm tab chạy ổn định với "
@@ -1222,7 +1230,7 @@ def conclusion(doc):
     h2(doc, "Hạn chế của nghiên cứu")
     body(doc, "Hạn chế lớn nhất là phạm vi dữ liệu: hai shard không đại diện cho toàn bộ arXiv, nên các kết luận về "
          "xu hướng chỉ có giá trị trong khoảng 2007–2016 đã tải. Bên cạnh đó, thống kê tác giả chưa phân giải thực "
-         "thể, danh sách từ khóa cố định và LDA huấn luyện trên mẫu là những điểm cần cải thiện nếu muốn mở rộng "
+         "thể, danh sách từ khóa cố định và K-Means huấn luyện trên mẫu là những điểm cần cải thiện nếu muốn mở rộng "
          "quy mô.")
     h2(doc, "Hướng phát triển trong tương lai")
     body(doc, "Trong thời gian tới, hệ thống có thể được mở rộng theo ba hướng: tăng quy mô dữ liệu và chạy trên cụm "
@@ -1242,8 +1250,8 @@ def references(doc):
         "[5] J. Kreps, N. Narkhede, J. Rao. Kafka: a Distributed Messaging System for Log Processing. Proc. NetDB, 2011.",
         "[6] A. Thusoo, J. S. Sarma, N. Jain, Z. Shao, P. Chakka, S. Anthony, H. Liu, P. Wyckoff, R. Murthy. "
         "Hive – A Warehousing Solution over a Map-Reduce Framework. Proc. VLDB, 2009.",
-        "[7] D. M. Blei, A. Y. Ng, M. I. Jordan. Latent Dirichlet Allocation. Journal of Machine Learning Research, "
-        "3:993–1022, 2003.",
+        "[7] S. P. Lloyd. Least Squares Quantization in PCM. IEEE Transactions on Information Theory, 28(2):129–137, "
+        "1982.",
         "[8] Apache Software Foundation. Apache Spark 3.5.3 Documentation. https://spark.apache.org/docs/3.5.3/",
         "[9] Apache Software Foundation. Apache Hive Language Manual. https://cwiki.apache.org/confluence/display/Hive",
         "[10] Apache Parquet. Parquet File Format. https://parquet.apache.org/docs/",
@@ -1251,6 +1259,8 @@ def references(doc):
         "Manning, 2015.",
         "[12] Streamlit. Streamlit Documentation. https://docs.streamlit.io",
         "[13] Docker Inc. Docker Compose Documentation. https://docs.docker.com/compose/",
+        "[14] G. Salton, C. Buckley. Term-Weighting Approaches in Automatic Text Retrieval. Information Processing "
+        "& Management, 24(5):513–523, 1988.",
     ]
     for ref in refs:
         p = add_para(doc, ref, style="Normal", space_after=6,
@@ -1308,7 +1318,7 @@ BigData/
 ├── notebooks/                  # 00..07
 ├── scripts/                    # dựng báo cáo, kiểm chứng
 └── output/
-    ├── analysis_results/       # manifest.json, topics.json
+    ├── analysis_results/       # manifest.json, clusters.json
     ├── charts/                 # 12 biểu đồ PNG
     ├── screenshots/            # ảnh dashboard
     └── reports/                # báo cáo Word, PPT

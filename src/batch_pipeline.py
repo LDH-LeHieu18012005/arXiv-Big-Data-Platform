@@ -1,5 +1,6 @@
 """Reproducible batch ETL and analytics. All outputs use schema version 2."""
 import json
+import shutil
 import time
 import uuid
 from datetime import datetime, timezone
@@ -12,9 +13,9 @@ HOT_KEYWORDS = ["transformer", "attention", "bert", "gpt", "diffusion", "reinfor
                 "federated", "quantum", "generative", "adversarial", "multimodal",
                 "contrastive", "self-supervised", "neural", "deep", "graph"]
 
-# LDA is trained and evaluated on deterministic samples so the run fits on a laptop.
-MAX_LDA_TRAIN_DOCUMENTS = 200_000
-MAX_LDA_TEST_DOCUMENTS = 50_000
+# K-Means is trained and evaluated on deterministic samples so the run fits on a laptop.
+MAX_MODEL_TRAIN_DOCUMENTS = 200_000
+MAX_MODEL_TEST_DOCUMENTS = 50_000
 
 
 def save_json(path, value):
@@ -91,15 +92,17 @@ def with_growth(frame, keys, value_col):
                         (F.col(value_col) / F.col("previous_count") - 1) * 100)))
 
 
-def analyze(spark, topics=10, train_topics=True):
+def analyze(spark, clusters=10, train_clusters=True):
     from pyspark.sql import functions as F
-    from pyspark.ml.feature import CountVectorizer, IDF
-    from pyspark.ml.clustering import LDA
+    from pyspark.ml.feature import CountVectorizer, IDF, Normalizer
+    from pyspark.ml.clustering import KMeans
     clean_meta = json.loads((DATA_DIR / "clean_manifest.json").read_text(encoding="utf-8"))
     if clean_meta.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("Run preprocessing with current schema first")
     invalidate_results()
-    save_json(RESULTS_DIR / "topics.json", [])
+    save_json(RESULTS_DIR / "clusters.json", [])
+    (RESULTS_DIR / "topics.json").unlink(missing_ok=True)
+    shutil.rmtree(RESULTS_DIR / "lda_model", ignore_errors=True)
     started = time.perf_counter()
     df = spark.read.parquet(str(DATA_DIR / "arxiv_clean.parquet")).cache()
     count = df.count()
@@ -155,7 +158,7 @@ def analyze(spark, topics=10, train_topics=True):
             frame.coalesce(1).write.mode("overwrite").parquet(str(RESULTS_DIR / f"{name}.parquet"))
             timings[name] = time.perf_counter()-begin
         model_metrics = {"status": "not_requested"}
-        if train_topics:
+        if train_clusters:
             begin = time.perf_counter()
             corpus = df.filter(F.size("abstract_tokens") > 0).select("id", "abstract_tokens")
             # Deterministic split by ID, vocabulary fitted only on training records.
@@ -165,43 +168,58 @@ def analyze(spark, topics=10, train_topics=True):
             if train_available < 2 or test_available < 1:
                 model_metrics = {"status": "insufficient_documents"}
             else:
-                # LDA is trained on a deterministic sample so the pipeline fits on a laptop.
-                # sample() keeps the original partitions; limit() would collapse to one task.
-                train_fraction = min(1.0, MAX_LDA_TRAIN_DOCUMENTS / train_available)
+                # Train on a deterministic sample so the run fits on a laptop. sample() keeps the
+                # original partitions; limit() would collapse the job to a single task.
+                train_fraction = min(1.0, MAX_MODEL_TRAIN_DOCUMENTS / train_available)
                 train_sample = train.sample(False, train_fraction, seed=42)
                 vocab = CountVectorizer(inputCol="abstract_tokens", outputCol="features",
                                         vocabSize=10000, minDF=1.0).fit(train_sample)
-                train_vectors = vocab.transform(train_sample).cache()
+                train_counts = vocab.transform(train_sample).cache()
+                # TF-IDF gives rare, discriminative terms more weight than common words, which is
+                # the standard input for K-Means on text.
+                idf = IDF(inputCol="features", outputCol="tfidf_features").fit(train_counts)
+                normalizer = Normalizer(inputCol="tfidf_features", outputCol="norm_features")
+                train_vectors = normalizer.transform(idf.transform(train_counts)).cache()
                 train_documents = train_vectors.count()
-                from pyspark.ml.functions import vector_to_array
-                test_fraction = min(1.0, MAX_LDA_TEST_DOCUMENTS / test_available)
+                vocab.write().overwrite().save(str(RESULTS_DIR / "vocabulary_model"))
+                idf.write().overwrite().save(str(RESULTS_DIR / "idf_model"))
+                normalizer.write().overwrite().save(str(RESULTS_DIR / "normalizer_model"))
+                kmeans = KMeans(k=clusters, maxIter=20, seed=42, featuresCol="norm_features",
+                                predictionCol="cluster").fit(train_vectors)
+                kmeans.write().overwrite().save(str(RESULTS_DIR / "kmeans_model"))
+                vocabulary = vocab.vocabulary
+                cluster_terms = []
+                for index, center in enumerate(kmeans.clusterCenters()):
+                    values = center.toArray() if hasattr(center, "toArray") else list(center)
+                    order = sorted(range(len(values)), key=lambda i: values[i], reverse=True)[:10]
+                    order = [i for i in order if values[i] > 0]
+                    total = float(sum(values[i] for i in order)) or 1.0
+                    cluster_terms.append({"cluster": index, "terms": [vocabulary[i] for i in order],
+                                          "weights": [float(values[i] / total) for i in order]})
+                # Cluster share is measured on a deterministic sample, never hard-coded.
+                share_fraction = min(1.0, 5000 / max(train_documents, 1))
+                sample = train_vectors.sample(False, share_fraction, seed=42).limit(5000)
+                predicted = kmeans.transform(sample)
+                counts = {row["cluster"]: row["count"] for row in predicted.groupBy("cluster").count().collect()}
+                sampled = sum(counts.values()) or 1
+                for item in cluster_terms:
+                    item["share"] = counts.get(item["cluster"], 0) / sampled
+                save_json(RESULTS_DIR / "clusters.json", cluster_terms)
+                test_fraction = min(1.0, MAX_MODEL_TEST_DOCUMENTS / test_available)
                 test_sample = test.sample(False, test_fraction, seed=42)
                 # A test abstract whose tokens are all outside the vocabulary becomes a zero
-                # vector; LDA still assigns it a distribution from the document prior, so no
-                # Python UDF (and no dense 10k-float conversion) is needed here.
-                test_vectors = vocab.transform(test_sample).cache()
-                idf = IDF(inputCol="features", outputCol="tfidf_features").fit(train_vectors)
-                idf.write().overwrite().save(str(RESULTS_DIR / "idf_model"))
-                vocab.write().overwrite().save(str(RESULTS_DIR / "vocabulary_model"))
-                lda = LDA(k=topics, maxIter=20, optimizer="online", seed=42).fit(train_vectors)
-                lda.write().overwrite().save(str(RESULTS_DIR / "lda_model"))
-                vocabulary = vocab.vocabulary
-                descriptions = [{"topic": r.topic, "terms": [vocabulary[i] for i in r.termIndices], "weights": r.termWeights}
-                                for r in lda.describeTopics(10).collect()]
-                # Topic prevalence is measured on a deterministic sample, never hard-coded.
-                sample = train_vectors.sample(False, 0.02, seed=42).limit(5000)
-                prevalence_frame = lda.transform(sample).select(
-                    [F.avg(vector_to_array("topicDistribution")[i]).alias(f"topic_{i}") for i in range(topics)])
-                prevalence = prevalence_frame.first().asDict()
-                for item in descriptions:
-                    item["prevalence"] = float(prevalence.get(f"topic_{item['topic']}") or 0.0)
-                save_json(RESULTS_DIR / "topics.json", descriptions)
+                # vector; K-Means still assigns it to its nearest centroid, so no Python UDF
+                # (and no dense 10k-float conversion) is needed here.
+                test_vectors = normalizer.transform(idf.transform(vocab.transform(test_sample))).cache()
                 test_count = test_vectors.count()
-                model_metrics = {"status": "trained", "k": topics, "vocabulary_size": len(vocabulary),
+                model_metrics = {"status": "trained", "model_type": "kmeans", "features": "tfidf",
+                                 "k": clusters, "vocabulary_size": len(vocabulary),
                                  "train_documents": train_documents, "train_available": train_available,
                                  "test_documents": test_count, "test_available": test_available,
-                                 "test_log_perplexity": lda.logPerplexity(test_vectors) if test_count else None,
+                                 "train_wsse": float(kmeans.summary.trainingCost),
+                                 "train_mean_sq_distance": float(kmeans.summary.trainingCost) / max(train_documents, 1),
                                  "seconds": time.perf_counter()-begin}
+                train_counts.unpersist()
                 train_vectors.unpersist()
                 test_vectors.unpersist()
         manifest = dict(schema_version=SCHEMA_VERSION, clean_run_id=clean_meta["clean_run_id"],
@@ -243,14 +261,14 @@ if __name__ == "__main__":
     from spark_common import create_spark_session
     parser = argparse.ArgumentParser()
     parser.add_argument("stage", choices=["preprocess", "analyze", "sync-hdfs", "all"])
-    parser.add_argument("--skip-topics", action="store_true")
+    parser.add_argument("--skip-clusters", action="store_true")
     args = parser.parse_args()
     spark = create_spark_session("ArXivBatch")
     try:
         if args.stage in ("preprocess", "all"):
             print(preprocess(spark))
         if args.stage in ("analyze", "all"):
-            print(analyze(spark, train_topics=not args.skip_topics))
+            print(analyze(spark, train_clusters=not args.skip_clusters))
         if args.stage in ("sync-hdfs", "all"):
             print(sync_hdfs(spark))
     finally:

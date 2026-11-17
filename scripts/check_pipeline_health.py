@@ -13,7 +13,7 @@ manifest = json.loads((RESULTS_DIR / "manifest.json").read_text(encoding="utf-8"
 for key in ("rows", "min_year", "max_year", "groups", "schema_version", "scope", "year_definition",
             "preprocessing_seconds", "total_analysis_seconds", "spark_version"):
     print(" ", key, "=", manifest.get(key))
-print("  model =", {k: manifest.get("model", {}).get(k) for k in ("status", "k", "train_documents", "test_documents", "test_log_perplexity")})
+print("  model =", {k: manifest.get("model", {}).get(k) for k in ("status", "model_type", "k", "train_documents", "test_documents", "train_mean_sq_distance")})
 
 print("\n== local data ==")
 for name in ("arxiv_data.parquet", "arxiv_clean.parquet"):

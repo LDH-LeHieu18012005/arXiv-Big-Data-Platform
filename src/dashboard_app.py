@@ -224,13 +224,13 @@ if show_overview:
         group_preview = ", ".join(group_names[:4]) + ("..." if len(group_names) > 4 else "")
         model = manifest.get("model") or {}
         if model.get("status") == "trained":
-            lda_desc = (
-                f"Test log-perplexity {model['test_log_perplexity']:.2f}"
-                if isinstance(model.get("test_log_perplexity"), (int, float))
+            model_desc = (
+                f"TF-IDF · {model['train_documents']:,} bài huấn luyện"
+                if isinstance(model.get("train_documents"), int)
                 else "Đã huấn luyện trên tập train"
             )
         else:
-            lda_desc = "Chưa huấn luyện"
+            model_desc = "Chưa huấn luyện"
 
         st.markdown(f"""
         <div class="kpi-grid">
@@ -250,9 +250,9 @@ if show_overview:
                 <div class="kpi-hint">{group_preview}</div>
             </div>
             <div class="kpi amber">
-                <div class="kpi-top"><span class="kpi-label">Chủ đề LDA</span><span class="kpi-icon">◇</span></div>
-                <div class="kpi-value">{model.get('k', '—')} topics</div>
-                <div class="kpi-hint">{lda_desc}</div>
+                <div class="kpi-top"><span class="kpi-label">Cụm K-Means</span><span class="kpi-icon">◇</span></div>
+                <div class="kpi-value">{model.get('k', '—')} cụm</div>
+                <div class="kpi-hint">{model_desc}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)

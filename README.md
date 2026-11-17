@@ -2,7 +2,7 @@
 
 Bài tập lớn môn Xử lý Dữ liệu lớn. Hệ thống gồm hai luồng dùng chung tầng lưu trữ HDFS:
 
-- **Batch:** Parquet → Spark (làm sạch, phân tích, LDA) → HDFS → Hive external table → Dashboard/báo cáo.
+- **Batch:** Parquet → Spark (làm sạch, phân tích, K-Means) → HDFS → Hive external table → Dashboard/báo cáo.
 - **Streaming:** Producer đọc bài báo thật → Kafka → Spark Structured Streaming → HDFS (có checkpoint).
 
 Mọi số liệu hiển thị trên dashboard, báo cáo và slide đều đọc từ tệp kết quả do pipeline sinh ra và
@@ -14,7 +14,7 @@ Mọi số liệu hiển thị trên dashboard, báo cáo và slide đều đọ
 |---|---|
 | Nguồn | `VatsaDev/test_arxiv`, revision `adef1f1e891574774660683f0f4548e50f5d551f` |
 | Shard | 2 tệp Parquet (`0000.parquet`, `0001.parquet`) |
-| Dung lượng | 569.398.929 byte (≈ 543 MB) |
+| Dung lượng | 569.398.929 byte (≈ 543 MiB) |
 | Bản ghi thô | 704.329 |
 | Năm nộp (v1) | 2007 – 2016 |
 | Nhóm ngành | 8 (`cs`, `math`, `physics`, `stat`, `q-bio`, `q-fin`, `eess`, `econ`) |
@@ -63,7 +63,7 @@ Trong container `spark-jupyter` (hoặc môi trường Python có Spark 3.5.3):
 
 ```bash
 python src/batch_pipeline.py preprocess      # làm sạch, ghi data/arxiv_clean.parquet + clean_manifest.json
-python src/batch_pipeline.py analyze         # 8 bảng phân tích + LDA + manifest.json
+python src/batch_pipeline.py analyze         # 9 bảng phân tích + K-Means + manifest.json
 python src/visualization.py                  # 12 biểu đồ + forecast_validation.json + charts/manifest.json
 python src/batch_pipeline.py sync-hdfs       # ghi Parquet phân vùng theo năm lên HDFS
 python src/hive_client.py                    # tạo external table Hive
@@ -121,36 +121,34 @@ output/
     top_terms.parquet
     top_authors.parquet
     author_trends.parquet
-    topics.json
+    clusters.json             # 10 cụm K-Means: từ khóa đại diện + tỷ lệ
+    kmeans_model/             # mô hình K-Means đã huấn luyện
+    normalizer_model/         # chuẩn hóa độ dài vector TF-IDF
   charts/                     # 12 biểu đồ PNG + manifest.json
   screenshots/                # ảnh dashboard dùng trong báo cáo
-  forecast_validation.json    # MAE holdout so với baseline
-  forecast_predictions.json   # chỉ chứa từ khóa được chấp nhận
+  forecast_validation.json    # R², MAE 3 năm kiểm tra và trạng thái từng từ khóa
+  forecast_predictions.json   # chỉ chứa từ khóa đạt R² ≥ 0,5
   reports/
     BAO_CAO_BAI_TAP_LON_BIGDATA.docx / .pdf
     pages_report.json         # số trang thật của từng hình/bảng do Word trả về
     SLIDE_THUYET_TRINH_BIGDATA.pptx / .pdf
 ```
 
-Sinh lại báo cáo và slide:
+Sinh lại slide và cập nhật báo cáo:
 
 ```bash
 # Slide: dừng lại nếu mã lần chạy giữa dữ liệu sạch, kết quả phân tích và biểu đồ không khớp.
 python scripts/build_presentation_slides.py
 python scripts/export_slides_pdf.py output/reports/SLIDE_THUYET_TRINH_BIGDATA.pptx
 
-# Báo cáo: dựng từ template, sau đó để Word cập nhật mục lục và trả về số trang thật.
-python scripts/build_arxiv_report.py
-python scripts/update_report_fields.py output/reports/BAO_CAO_BAI_TAP_LON_BIGDATA.docx output/reports/pages_report.json
-python scripts/build_arxiv_report.py output/reports/pages_report.json
+# Báo cáo: bản DOCX trong output/reports đã được biên tập lần cuối bằng Word.
+# Chỉ cần cập nhật mục lục, số trang và xuất PDF:
 python scripts/update_report_fields.py output/reports/BAO_CAO_BAI_TAP_LON_BIGDATA.docx output/reports/pages_report.json output/reports/BAO_CAO_BAI_TAP_LON_BIGDATA.pdf
 ```
 
-Hai lần dựng báo cáo là cần thiết: lần đầu chưa biết số trang của hình/bảng, Word tính bố cục và ghi
-số trang vào `pages_report.json`, lần hai điền các số đó vào danh mục hình vẽ/bảng rồi mới xuất PDF.
-Nếu chạy lại vòng dựng – cập nhật, kiểm tra `pages_report.json` không đổi trước khi xuất bản cuối.
-Mẫu bố cục nằm tại `templates/report_template.docx` (chỉ giữ style, header và khổ trang; toàn bộ nội
-dung được sinh lại từ pipeline).
+`scripts/build_arxiv_report.py` là bản sinh nháp từ template; bản báo cáo nộp bài đã được rút gọn và
+căn trang tay, nên **không chạy lại** script này để tránh ghi đè bản cuối. Mẫu bố cục nằm tại
+`templates/report_template.docx` (chỉ giữ style, header và khổ trang).
 
 ## Kiểm thử
 
@@ -179,5 +177,5 @@ các cột mà dashboard sử dụng.
 - Chỉ phân tích 2 shard đã tải; không suy rộng ra toàn bộ arXiv.
 - Tên tác giả chưa được phân giải thực thể.
 - Danh sách 16 từ khóa công nghệ là cố định.
-- LDA huấn luyện trên mẫu xác định tối đa 200.000 bài để phù hợp tài nguyên máy cá nhân.
+- K-Means huấn luyện trên mẫu xác định tối đa 200.000 bài để phù hợp tài nguyên máy cá nhân.
 - Thời gian chạy phụ thuộc cấu hình máy, không phải benchmark chuẩn.

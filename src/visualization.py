@@ -14,10 +14,11 @@ from batch_pipeline import save_json
 
 
 def forecast_trends(keywords, manifest):
-    """Compare linear extrapolation with last-value baseline on the last 3 years.
+    """Fit a simple ordinary-least-squares line for each keyword and project three years.
 
     Boundary years are excluded because a downloaded shard can contain partial years.
-    Even interior years are only representative of the downloaded subset.
+    A prediction is published only when the fit explains at least half of the variance
+    (R-squared >= 0.5); the three-year holdout MAE is reported as a quality check.
     """
     records, predictions = [], []
     for word in ("transformer", "attention", "diffusion", "quantum"):
@@ -28,23 +29,29 @@ def forecast_trends(keywords, manifest):
             x = sub.year.to_numpy(dtype=float)
             y = sub.papers_per_1000.to_numpy(dtype=float)
             origin = x[0]
-            fit = np.polyfit(x[:-3] - origin, y[:-3], 1)
-            heldout = np.clip(np.polyval(fit, x[-3:] - origin), 0, 1000)
+            fit = np.polyfit(x - origin, y, 1)
+            fitted = np.polyval(fit, x - origin)
+            ss_res = float(np.sum((y - fitted) ** 2))
+            ss_tot = float(np.sum((y - y.mean()) ** 2))
+            r2 = None if ss_tot <= 1e-12 else 1.0 - ss_res / ss_tot
+            heldout = np.clip(np.polyval(np.polyfit(x[:-3] - origin, y[:-3], 1), x[-3:] - origin), 0, 1000)
             mae = float(np.mean(np.abs(y[-3:] - heldout)))
-            baseline_mae = float(np.mean(np.abs(y[-3:] - y[-4])))
-            item.update(train_end_year=int(x[-4]), test_years=x[-3:].astype(int).tolist(),
-                        mae=mae, baseline_mae=baseline_mae, unit="papers_per_1000",
-                        status="accepted" if mae < baseline_mae else "did_not_beat_baseline")
-            if item["status"] == "accepted":
-                fit = np.polyfit(x - origin, y, 1)
-                # Only years after the dataset's last year are published as forecasts, and the
-                # horizon is capped at 3 years.
+            item.update(status="ok", slope=float(fit[0]), intercept=float(fit[1] - fit[0] * origin),
+                        r2=r2, mae=mae, train_years=x[:-3].astype(int).tolist(),
+                        test_years=x[-3:].astype(int).tolist(), unit="papers_per_1000")
+            if ss_tot <= 1e-12 or abs(fit[0]) < 1e-9:
+                item["status"] = "flat_series"
+            elif r2 is None or r2 < 0.5:
+                item["status"] = "weak_fit"
+            else:
+                # Only future years are published, and the horizon is capped at three years.
                 future = np.arange(int(manifest["max_year"]) + 1, int(manifest["max_year"]) + 4)
                 for year, value in zip(future, np.clip(np.polyval(fit, future - origin), 0, 1000)):
                     predictions.append({"word": word, "year": int(year), "papers_per_1000": float(value)})
         records.append(item)
     return {"clean_run_id": manifest["clean_run_id"], "scope": "downloaded_subset_only",
-            "method": "linear_trend_three_year_holdout_vs_last_value",
+            "method": "ordinary_least_squares_linear_regression",
+            "quality_rule": "publish_when_r2_at_least_0.5",
             "metrics": records}, predictions
 
 
@@ -58,6 +65,9 @@ def create_charts():
     chart_dir = OUTPUT_DIR / "charts"
     chart_dir.mkdir(parents=True, exist_ok=True)
     (chart_dir / "manifest.json").unlink(missing_ok=True)
+    for obsolete in ("10_validated_trend.png", "12_lda_topic_bubble.png",
+                     "12_kmeans_cluster_bubble.png"):
+        (chart_dir / obsolete).unlink(missing_ok=True)
     plt.style.use("seaborn-v0_8-whitegrid")
 
     def load(name):
@@ -186,7 +196,7 @@ def create_charts():
     plt.barh(top_authors.author, top_authors["count"], color="#be123c")
     save("09_top_authors.png", "Top author names (namesakes are not disambiguated)", "Papers")
 
-    # 10 - validated trend
+    # 10 - linear regression trend
     validation, predictions = forecast_trends(kw, manifest)
     save_json(OUTPUT_DIR / "forecast_validation.json", validation)
     save_json(OUTPUT_DIR / "forecast_predictions.json",
@@ -194,16 +204,19 @@ def create_charts():
     plt.figure(figsize=(13, 6.5))
     for word in ("transformer", "attention", "diffusion", "quantum"):
         history = kw[kw.word == word].sort_values("year")
-        plt.plot(history.year, history.papers_per_1000, marker="o", label=word)
+        item = next(row for row in validation["metrics"] if row["word"] == word)
+        r2 = item.get("r2")
+        label = f"{word} (R²={r2:.2f})" if isinstance(r2, (int, float)) else word
+        plt.plot(history.year, history.papers_per_1000, marker="o", label=label)
         future = [r for r in predictions if r["word"] == word]
         if future:
             # Anchor the dashed forecast on the last measured year so the two lines connect.
             last = history.iloc[-1]
             plt.plot([int(last.year)] + [r["year"] for r in future],
                      [float(last.papers_per_1000)] + [r["papers_per_1000"] for r in future],
-                     "--", label=word + " extrapolation")
+                     "--", label=word + " forecast")
     plt.legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=8)
-    save("10_validated_trend.png", "Extrapolation only when better than held-out baseline",
+    save("10_linear_regression_trend.png", "Linear regression trend (forecast only when R² ≥ 0.5)",
          "Year", "Papers per 1,000")
 
     # 11 - radar comparison
@@ -235,28 +248,25 @@ def create_charts():
     plt.savefig(chart_dir / "11_field_radar_comparison.png", dpi=160, bbox_inches="tight", facecolor="white")
     plt.close()
 
-    # 12 - LDA topic bubble
-    topics_path = RESULTS_DIR / "topics.json"
-    topics = json.loads(topics_path.read_text(encoding="utf-8")) if topics_path.exists() else []
-    plt.figure(figsize=(12, 7))
-    if topics:
-        x = [float(item.get("prevalence", 0)) * 100 for item in topics]
-        y = [float(np.mean(item["weights"])) for item in topics]
-        sizes = [max(120, float(item.get("prevalence", 0)) * 9000) for item in topics]
-        scatter = plt.scatter(x, y, s=sizes, c=range(len(topics)), cmap="viridis", alpha=0.75,
-                              edgecolor="white", linewidth=1.5)
-        for item, xpos, ypos in zip(topics, x, y):
-            label = f"T{item['topic']}: " + ", ".join(item["terms"][:2])
-            plt.annotate(label, (xpos, ypos), fontsize=7.5, xytext=(7, 5), textcoords="offset points")
-        plt.colorbar(scatter, label="Topic index")
-        plt.margins(x=0.30, y=0.14)
-        plt.xlabel("Mean topic prevalence in sampled documents (%)")
-        plt.ylabel("Mean top-term weight")
-        title = "Spark MLlib LDA topics (bubble size = prevalence)"
+    # 12 - K-Means clusters: share of papers with top terms
+    clusters_path = RESULTS_DIR / "clusters.json"
+    clusters = json.loads(clusters_path.read_text(encoding="utf-8")) if clusters_path.exists() else []
+    plt.figure(figsize=(11, 7))
+    if clusters:
+        ordered = sorted(clusters, key=lambda item: float(item.get("share", 0)))
+        labels = [f"C{item['cluster']}: " + ", ".join(item["terms"][:3]) for item in ordered]
+        shares = [float(item.get("share", 0)) * 100 for item in ordered]
+        bars = plt.barh(range(len(ordered)), shares, color="#4f46e5", alpha=0.8)
+        plt.yticks(range(len(ordered)), labels, fontsize=10)
+        for bar, share in zip(bars, shares):
+            plt.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height() / 2,
+                     f"{share:.1f}%", va="center", fontsize=9.5, color="#334155")
+        plt.xlim(0, max(shares) * 1.18)
+        title = "Spark MLlib K-Means clusters on TF-IDF (share of papers, top terms)"
     else:
-        plt.text(0.5, 0.5, "LDA topics not trained", ha="center", va="center")
-        title = "LDA topics unavailable"
-    save("12_lda_topic_bubble.png", title, "Topic prevalence (%)", "Mean term weight")
+        plt.text(0.5, 0.5, "K-Means clusters not trained", ha="center", va="center")
+        title = "K-Means clusters unavailable"
+    save("12_kmeans_clusters.png", title, "Share of sampled papers (%)")
 
     chart_files = sorted(path.name for path in chart_dir.glob("*.png"))
     if len(chart_files) != 12:

@@ -99,14 +99,24 @@ class ForecastRules(unittest.TestCase):
         self.assertEqual(predictions, [])
         self.assertTrue(all(row["status"] == "insufficient_history" for row in metadata["metrics"]))
 
-    def test_constant_series_does_not_claim_improvement(self):
+    def test_constant_series_is_reported_as_flat(self):
         import pandas as pd
         from visualization import forecast_trends
         frame = pd.DataFrame([dict(word="quantum", year=y, year_total=500, papers_per_1000=0)
                               for y in range(2007, 2021)])
         validation, predictions = forecast_trends(frame, dict(min_year=2007, max_year=2020, clean_run_id="test"))
         self.assertEqual(predictions, [])
-        self.assertEqual(validation["metrics"][-1]["status"], "did_not_beat_baseline")
+        self.assertEqual(validation["metrics"][-1]["status"], "flat_series")
+
+    def test_weak_fit_is_not_published(self):
+        import pandas as pd
+        from visualization import forecast_trends
+        values = [0, 100, 5, 100, 10, 100, 15, 100, 20, 100, 25, 100]
+        frame = pd.DataFrame([dict(word="quantum", year=y, year_total=500, papers_per_1000=v)
+                              for y, v in zip(range(2007, 2021), values)])
+        validation, predictions = forecast_trends(frame, dict(min_year=2007, max_year=2020, clean_run_id="test"))
+        self.assertEqual(predictions, [])
+        self.assertEqual(validation["metrics"][-1]["status"], "weak_fit")
 
     def test_linear_series_uses_temporal_holdout_and_bounded_horizon(self):
         import pandas as pd
@@ -117,6 +127,7 @@ class ForecastRules(unittest.TestCase):
         self.assertEqual(validation["metrics"][-1]["test_years"], [2017, 2018, 2019])
         self.assertEqual([p["year"] for p in predictions], [2021, 2022, 2023])
         self.assertLess(validation["metrics"][-1]["mae"], 1e-8)
+        self.assertAlmostEqual(validation["metrics"][-1]["r2"], 1.0)
 
 
 class NotebookChecks(unittest.TestCase):
@@ -200,7 +211,7 @@ class SparkIntegration(unittest.TestCase):
             with patch.object(batch_pipeline, "DATA_DIR", directory), patch.object(batch_pipeline, "RESULTS_DIR", directory / "results"), \
                  patch.object(DataFrameReader, "parquet", return_value=frame), \
                  patch.object(DataFrameWriter, "parquet", autospec=True, side_effect=capture):
-                manifest = batch_pipeline.analyze(self.spark, train_topics=False)
+                manifest = batch_pipeline.analyze(self.spark, train_clusters=False)
         self.assertEqual(manifest["rows"], 2)
         self.assertEqual(manifest["groups"], 2)
         yearly = sorted(captured["yearly_growth.parquet"], key=lambda r:r.year)
@@ -211,7 +222,7 @@ class SparkIntegration(unittest.TestCase):
         jane = next(r for r in captured["top_authors.parquet"] if r.author == "Jane Doe")
         self.assertEqual(jane["count"], 2)
 
-    def test_topic_training_has_heldout_metrics_and_real_vocabulary(self):
+    def test_kmeans_training_has_heldout_metrics_and_real_vocabulary(self):
         import batch_pipeline
         from pyspark.sql.readwriter import DataFrameReader, DataFrameWriter
         from pyspark.ml.util import JavaMLWriter
@@ -231,14 +242,17 @@ class SparkIntegration(unittest.TestCase):
             with patch.object(batch_pipeline, "DATA_DIR", directory), patch.object(batch_pipeline, "RESULTS_DIR", directory / "results"), \
                  patch.object(DataFrameReader, "parquet", return_value=frame), \
                  patch.object(DataFrameWriter, "parquet", autospec=True), patch.object(JavaMLWriter, "save", autospec=True):
-                manifest = batch_pipeline.analyze(self.spark, topics=2, train_topics=True)
+                manifest = batch_pipeline.analyze(self.spark, clusters=2, train_clusters=True)
             self.assertEqual(manifest["model"]["status"], "trained")
+            self.assertEqual(manifest["model"]["model_type"], "kmeans")
             self.assertGreater(manifest["model"]["test_documents"], 0)
             import math
-            self.assertTrue(math.isfinite(manifest["model"]["test_log_perplexity"]))
-            topics = json.loads((directory / "results/topics.json").read_text(encoding="utf-8"))
-            self.assertEqual(len(topics), 2)
-            self.assertTrue(all(isinstance(word, str) for topic in topics for word in topic["terms"]))
+            self.assertTrue(math.isfinite(manifest["model"]["train_wsse"]))
+            self.assertLess(manifest["model"]["train_mean_sq_distance"], 4.0)
+            clusters = json.loads((directory / "results/clusters.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(clusters), 2)
+            self.assertTrue(all(isinstance(word, str) for cluster in clusters for word in cluster["terms"]))
+            self.assertAlmostEqual(sum(cluster["share"] for cluster in clusters), 1.0)
 
     @unittest.skipIf(os.name == "nt", "Spark Parquet writes require native Hadoop on Windows; run in Linux container")
     def test_batch_pipeline_writes_consistent_outputs_from_raw_data(self):
@@ -258,7 +272,7 @@ class SparkIntegration(unittest.TestCase):
             with patch.object(batch_pipeline, "DATA_DIR", data), patch.object(batch_pipeline, "RESULTS_DIR", results), \
                  patch.object(project_config, "DATA_DIR", data), patch.object(project_config, "RESULTS_DIR", results):
                 clean = batch_pipeline.preprocess(self.spark)
-                manifest = batch_pipeline.analyze(self.spark, train_topics=False)
+                manifest = batch_pipeline.analyze(self.spark, train_clusters=False)
                 self.assertEqual(clean["rejected_rows"], 1)
                 self.assertEqual(manifest["rows"], 2)
                 self.assertEqual((manifest["min_year"], manifest["max_year"]), (2007, 2009))
@@ -338,14 +352,16 @@ class PublishedArtifacts(unittest.TestCase):
             self.assertTrue((ROOT / "output" / "charts" / name).exists(), name)
         self.assertNotIn("10_trend_forecast_2030.png", manifest["charts"])
 
-    def test_forecast_is_bounded_and_accepted_only(self):
+    def test_forecast_is_bounded_and_published_only_with_strong_fit(self):
         forecast = self.read(self.forecast)
         result = self.read(self.result)
-        accepted = {item["word"] for item in forecast["metrics"] if item["status"] == "accepted"}
+        published = {item["word"] for item in forecast["metrics"] if item["status"] == "ok"}
+        self.assertTrue(all(item.get("r2") is None or item["r2"] >= 0.5
+                            for item in forecast["metrics"] if item["status"] == "ok"))
         predictions_path = ROOT / "output" / "forecast_predictions.json"
         if predictions_path.exists():
             predictions = self.read(predictions_path)["predictions"]
-            self.assertTrue(all(item["word"] in accepted for item in predictions))
+            self.assertEqual({item["word"] for item in predictions}, published)
             self.assertTrue(all(item["year"] <= result["max_year"] + 3 for item in predictions))
             self.assertTrue(all(item["year"] > result["max_year"] for item in predictions))
 

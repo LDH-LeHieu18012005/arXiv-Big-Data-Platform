@@ -79,11 +79,12 @@ def vn_float(value, digits=1):
 
 def pretty_bytes(value):
     value = float(value)
-    for unit in ("B", "KB", "MB", "GB"):
-        if value < 1024 or unit == "GB":
+    # Binary units: the value is divided by 1024, so label it KiB/MiB/GiB (same as the report).
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if value < 1024 or unit == "GiB":
             return f"{vn_float(value, 1)} {unit}"
         value /= 1024
-    return f"{vn_float(value, 1)} GB"
+    return f"{vn_float(value, 1)} GiB"
 
 
 clean = load_json(DATA_DIR / "clean_manifest.json")
@@ -91,7 +92,7 @@ analysis = load_json(RESULTS_DIR / "manifest.json")
 source = load_json(DATA_DIR / "source_manifest.json")
 chart_manifest = load_json(CHARTS_DIR / "manifest.json")
 forecast = load_json(BASE_DIR / "output" / "forecast_validation.json")
-topics = load_json(RESULTS_DIR / "topics.json")
+clusters = load_json(RESULTS_DIR / "clusters.json")
 
 if clean.get("clean_run_id") != analysis.get("clean_run_id"):
     raise RuntimeError("Manifest không cùng lần chạy; chạy lại pipeline trước khi tạo slide.")
@@ -117,16 +118,16 @@ stable_years = yearly[(yearly["year"] > min_year) & (yearly["year"] < max_year)]
 growth_start, growth_end = stable_years.iloc[0], stable_years.iloc[-1]
 overall_growth = (growth_end["count"] / growth_start["count"] - 1) * 100
 cagr = ((growth_end["count"] / growth_start["count"]) ** (1 / (growth_end["year"] - growth_start["year"])) - 1) * 100
-accepted = [item for item in forecast.get("metrics", []) if item.get("status") == "accepted"]
+publishable = [item for item in forecast.get("metrics", []) if item.get("status") == "ok"]
 prep_seconds = float(analysis.get("preprocessing_seconds", 0))
 analysis_seconds = float(analysis.get("total_analysis_seconds", 0))
-lda_seconds = float(model.get("seconds", 0))
+model_seconds = float(model.get("seconds", 0))
 
 prs = Presentation()
 prs.slide_width = Inches(13.333)
 prs.slide_height = Inches(7.5)
 BLANK = prs.slide_layouts[6]
-TOTAL = 23
+TOTAL = 17
 LOGO = SHOTS_DIR / "cogailab_logo.png"
 
 
@@ -395,7 +396,7 @@ header(slide, "Bài toán và mục tiêu", "Từ dữ liệu thô đến kết 
 add_text(slide, "Vì sao cần xử lý dữ liệu lớn", 0.62, 1.86, 6.0, 0.34, size=15, bold=True, color=NAVY)
 add_bullets(slide, [
     "arXiv tăng liên tục; riêng hai shard đã có 704.329 bản ghi, vượt khả năng xử lý của một máy.",
-    "Câu hỏi cần trả lời: ngành nào tăng, từ khóa nào lên, chủ đề nào dịch chuyển.",
+    "Câu hỏi cần trả lời: ngành nào tăng, từ khóa nào lên, hướng nghiên cứu nào dịch chuyển.",
     "Dữ liệu vừa đến theo lô lịch sử, vừa đến liên tục theo sự kiện.",
     "Nhiều báo cáo công bố số liệu không tái lập được vì thiếu manifest.",
 ], 0.62, 2.28, 6.1, 2.5, size=13.5, gap=11)
@@ -403,8 +404,8 @@ card(slide, 0.62, 4.48, 6.1, 1.5)
 add_text(slide, "Phạm vi dữ liệu thực nghiệm", 0.84, 4.64, 5.6, 0.28, size=11, bold=True, color=BLUE)
 add_text(slide, "2 shard  ·  704.329 bài  ·  2007–2016", 0.84, 4.94, 5.7, 0.38,
          size=15, bold=True, color=NAVY)
-add_text(slide, f"{pretty_bytes(total_bytes)} Parquet thô; 2016 chỉ trích đến giữa năm.",
-         0.84, 5.38, 5.7, 0.4, size=10.5, color=MUTED)
+add_text(slide, f"{pretty_bytes(total_bytes)} Parquet thô; 2016 chỉ có dữ liệu đến 12/02/2016 (khoảng 1,4 tháng).",
+         0.84, 5.38, 5.7, 0.55, size=10.5, color=MUTED)
 add_text(slide, "Mục tiêu của bài làm", 7.0, 1.86, 5.6, 0.34, size=15, bold=True, color=NAVY)
 card(slide, 7.0, 2.24, 5.7, 2.62)
 add_bullets(slide, [
@@ -420,7 +421,8 @@ card(slide, 7.0, 5.05, 5.7, 0.95, fill=RGBColor(0xFF, 0xF8, 0xEC),
 add_text(slide, "Ngoài phạm vi", 7.22, 5.16, 5.2, 0.26, size=10.5, bold=True, color=AMBER)
 add_text(slide, "Không cào toàn bộ arXiv, không huấn luyện mô hình ngôn ngữ lớn; chỉ dùng dữ liệu đã tải.",
          7.22, 5.44, 5.25, 0.5, size=10.5, color=MUTED)
-add_text(slide, "Nguyên tắc: đo lường thay vì phỏng đoán — mọi con số đều lấy từ manifest, Hive hoặc log lần chạy thật.",
+add_text(slide, "Nguyên tắc: đo lường thay vì phỏng đoán — mọi con số đều được đối chiếu với manifest, "
+                "Parquet kết quả, Hive hoặc log lần chạy thật.",
          0.62, 6.55, 12.1, 0.34, size=11.5, bold=True, color=GREEN)
 
 # ---------------------------------------------------------------------------
@@ -447,15 +449,15 @@ add_text(slide, "Một bài báo được xử lý giống nhau dù đi đườn
 # 04 - Công nghệ
 # ---------------------------------------------------------------------------
 slide = new_slide(4)
-header(slide, "Công nghệ sử dụng", "Đóng gói bằng Docker Compose, 12 dịch vụ cùng phiên bản")
+header(slide, "Công nghệ sử dụng", "Docker Compose: 11 dịch vụ mặc định (12 khi bật profile streaming)")
 table(slide, ["Thành phần", "Vai trò", "Phiên bản"], [
     ["Hadoop HDFS", "Lưu trữ phân tán, 10 partition theo năm", "3.2.1"],
-    ["Apache Spark", "Batch, Structured Streaming, MLlib LDA", analysis.get("spark_version", "3.5.3")],
-    ["Apache Kafka", "Hàng đợi sự kiện bài báo mới", "7.6.0"],
+    ["Apache Spark", "Batch, Structured Streaming, MLlib K-Means", analysis.get("spark_version", "3.5.3")],
+    ["Apache Kafka", "Hàng đợi sự kiện bài báo mới", "3.6.0 (Confluent 7.6.0)"],
     ["Apache Hive", "External table + view trên HDFS", "2.3.2"],
-    ["PostgreSQL", "Hive Metastore", "2.3.0"],
+    ["PostgreSQL", "Hive Metastore", "9.5.3 (tag 2.3.0)"],
     ["Streamlit", "Dashboard 5 tab", "1.40.0"],
-    ["Docker Compose", "Điều phối 12 container", "Compose v2"],
+    ["Docker Compose", "Điều phối 11 container mặc định", "v5.1.1"],
 ], 0.6, 1.85, 7.7, 3.9, size=12, col_widths=[1.1, 2.2, 0.9])
 add_text(slide, "Vì sao chọn?", 8.7, 1.85, 3.9, 0.32, size=13, bold=True, color=NAVY)
 add_bullets(slide, [
@@ -508,24 +510,25 @@ step_card(slide, 0.6, 1.9, 3.95, 1.6, 1, "Tiền xử lý",
 step_card(slide, 4.69, 1.9, 3.95, 1.6, 2, "Phân tích",
           "9 bảng kết quả: tăng trưởng, nhóm ngành, chuyên ngành, từ khóa, tác giả.")
 step_card(slide, 8.78, 1.9, 3.95, 1.6, 3, "Đồng bộ HDFS",
-          "Ghi Parquet phân vùng theo năm, tạo _SUCCESS, chạy MSCK REPAIR cho Hive.")
+          "Ghi Parquet phân vùng theo năm, tạo _SUCCESS ở thư mục gốc; MSCK REPAIR chạy riêng từ dashboard.")
 table(slide, ["Giai đoạn", "Nội dung", "Thời gian"], [
     ["preprocess", "704.329 bản ghi → Parquet sạch", f"{vn_float(prep_seconds)} giây"],
-    ["analyze", "9 bảng phân tích + LDA", f"{vn_float(analysis_seconds)} giây"],
-    ["— trong đó LDA", "K = 10, từ điển 10.000 từ", f"{vn_float(lda_seconds)} giây"],
-    ["sync-hdfs", "Parquet phân vùng + MSCK REPAIR", "—"],
+    ["analyze", "9 bảng phân tích + K-Means", f"{vn_float(analysis_seconds)} giây"],
+    ["— trong đó K-Means", "K = 10, từ điển 10.000 từ", f"{vn_float(model_seconds)} giây"],
+    ["sync-hdfs", "Parquet phân vùng + _SUCCESS", "—"],
 ], 0.6, 3.78, 7.6, 2.05, size=11.5, col_widths=[1.0, 2.2, 0.85])
 card(slide, 8.5, 3.78, 4.2, 1.25)
 add_text(slide, f"{vn_float(prep_seconds + analysis_seconds)} giây", 8.72, 3.94, 3.7, 0.45,
          size=21, bold=True, color=GREEN)
-add_text(slide, "tổng thời gian batch cho 704.329 bài (~9,9 phút)", 8.72, 4.42, 3.8, 0.5,
+add_text(slide, f"tổng thời gian batch cho {vn_int(rows)} bài (~{vn_float((prep_seconds + analysis_seconds) / 60)} phút)",
+         8.72, 4.42, 3.8, 0.5,
          size=10.5, color=MUTED)
 add_text(slide, "Sau khi ghi, chương trình đọc lại Parquet để đối chiếu số dòng — lệch là dừng ngay.",
          8.5, 5.18, 4.2, 0.6, size=10.5, color=MUTED)
 card(slide, 0.6, 6.05, 12.1, 0.72)
 add_text(slide, "docker compose exec spark-jupyter python src/batch_pipeline.py all",
-         0.85, 6.17, 6.9, 0.32, size=11, bold=True, color=NAVY)
-add_text(slide, "→ chạy lần lượt preprocess  →  analyze  →  sync-hdfs", 7.9, 6.19, 4.6, 0.3,
+         0.85, 6.25, 6.9, 0.32, size=11, bold=True, color=NAVY)
+add_text(slide, "→ chạy lần lượt preprocess  →  analyze  →  sync-hdfs", 7.9, 6.26, 4.6, 0.3,
          size=10.5, color=MUTED)
 
 # ---------------------------------------------------------------------------
@@ -547,22 +550,24 @@ kpi(slide, 9.84, 4.2, 2.9, 1.45, "Up", "consumer sau bản ghi lỗi", color=GRE
 add_text(slide, "Sự kiện theo nhóm ngành", 0.62, 5.82, 5.6, 0.3, size=12, bold=True, color=NAVY)
 add_text(slide, "physics 29 / 18  ·  math 21 / 12  ·  cs 7 / 4", 0.62, 6.15, 5.8, 0.32,
          size=12, color=MUTED)
-add_text(slide, "Số sự kiện khác số bài vì cùng một bài có thể được phát lại — báo cáo luôn dùng COUNT(DISTINCT id).",
-         6.4, 5.9, 6.2, 0.7, size=11, color=MUTED)
+add_text(slide, "Số sự kiện khác số bài vì cùng một bài có thể được phát lại — luôn dùng COUNT(DISTINCT id). "
+                "Dòng cs (7/4) là bản ghi thử 2401.xxxxx gửi từ dashboard, không phải bài trong tập đã tải.",
+         6.4, 5.9, 6.2, 0.95, size=10.5, color=MUTED)
 
 # ---------------------------------------------------------------------------
 # 08 - Hive
 # ---------------------------------------------------------------------------
 slide = new_slide(8)
-header(slide, "Kho dữ liệu Hive", "External table trỏ thẳng vào Parquet trên HDFS")
+header(slide, "Kho dữ liệu Hive", "Bốn external table và ba view trỏ thẳng vào Parquet trên HDFS")
 table(slide, ["Đối tượng", "Kiểu", "Phân vùng / vai trò"], [
     ["arxiv_historical", "External table", "year · 704.329 dòng"],
     ["arxiv_stream", "External table", "main_group_clean · sự kiện"],
     ["hot_keyword_trends", "External table", "year · từ khóa"],
+    ["arxiv_stream_rejects", "External table", "main_group_clean · bản ghi lỗi"],
     ["v_yearly_growth", "View", "Tăng trưởng theo năm"],
     ["v_field_distribution", "View", "Cơ cấu nhóm ngành"],
     ["v_top_categories", "View", "Xếp hạng chuyên ngành"],
-], 0.6, 1.86, 6.9, 3.3, size=11.5, col_widths=[1.4, 1.0, 2.2])
+], 0.6, 1.86, 6.9, 3.4, size=11.5, col_widths=[1.4, 1.0, 2.2])
 add_text(slide, "Tám mẫu truy vấn trên dashboard", 7.9, 1.86, 4.5, 0.32, size=13, bold=True, color=NAVY)
 add_bullets(slide, [
     "Quy mô, tăng trưởng, cơ cấu ngành.",
@@ -606,165 +611,122 @@ add_text(slide, "Deep link ?tab=… và ?tab=hive&q=7&auto=1 dùng cho demo và 
          8.9, 5.7, 3.95, 0.7, size=10.5, color=MUTED)
 
 # ---------------------------------------------------------------------------
-# 10 - Dashboard gửi dữ liệu
+# 10 - Dashboard: gửi dữ liệu + Hive SQL (gộp)
 # ---------------------------------------------------------------------------
 slide = new_slide(10)
-header(slide, "Tab Gửi dữ liệu: Kafka Ingestion Studio", "Kiểm tra trước khi gửi, đếm theo ACK, có nhật ký phiên")
-add_image(slide, "ui_ingest.png", 4.55, 1.78, 8.2, 4.9)
-add_text(slide, "Luồng gửi", 0.62, 1.85, 3.7, 0.3, size=13, bold=True, color=NAVY)
+header(slide, "Dashboard: gửi dữ liệu và Hive SQL",
+       "Hai tab thao tác chính: nạp sự kiện qua Kafka và truy vấn trực tiếp HiveServer2")
+add_image(slide, "ui_ingest.png", 0.5, 1.78, 5.9, 3.3)
+add_image(slide, "ui_hive_q7.png", 6.95, 1.78, 5.9, 3.3)
+add_text(slide, "Tab Gửi dữ liệu — Kafka Ingestion Studio", 0.62, 5.2, 5.7, 0.3,
+         size=11, bold=True, color=NAVY)
+add_text(slide, "Tab Hive SQL — mẫu 7 raw vs clean vs tokens", 7.05, 5.2, 5.7, 0.3,
+         size=11, bold=True, color=NAVY)
 add_bullets(slide, [
-    "Nhập id, tiêu đề, tác giả, lĩnh vực, tóm tắt.",
     "validate_paper kiểm tra 4 trường bắt buộc và định dạng id.",
-    "Producer gửi với acks=all, chờ xác nhận.",
-    "Micro-batch kế tiếp đưa bài vào arxiv_stream.",
-    "Nhật ký phiên giữ id, thời điểm và trạng thái ACK.",
-], 0.62, 2.24, 3.75, 2.3, size=10.5, gap=9)
-card(slide, 0.62, 4.6, 3.7, 1.15)
-add_text(slide, "Phát lại hàng loạt", 0.8, 4.73, 3.4, 0.28, size=11, bold=True, color=BLUE)
-add_text(slide, "Lấy bài thật từ Parquet sạch, gửi lại qua Kafka để thử tải và kiểm tra idempotent.",
-         0.8, 5.03, 3.4, 0.95, size=10, color=MUTED)
-
-# ---------------------------------------------------------------------------
-# 11 - Dashboard Hive
-# ---------------------------------------------------------------------------
-slide = new_slide(11)
-header(slide, "Tab Hive SQL: truy vấn trực tiếp HiveServer2", "Kết quả giữ nguyên khi thao tác, xuất được CSV")
-add_image(slide, "ui_hive_q7.png", 0.5, 1.78, 8.2, 4.9)
-add_text(slide, "Mẫu 7 — raw vs clean vs tokens", 8.9, 1.85, 3.9, 0.3, size=12, bold=True, color=NAVY)
-add_text(slide, "Trả về raw_chars, clean_chars, token_count cho 12 sự kiện mới nhất, kèm thời gian xử lý.",
-         8.9, 2.2, 3.95, 1.0, size=10.5, color=MUTED)
-add_text(slide, "Điểm cần lưu ý", 8.9, 3.35, 3.9, 0.3, size=11, bold=True, color=NAVY)
+    "Producer gửi acks=all; chỉ đếm khi Kafka ACK.",
+    "Phát lại hàng loạt từ Parquet sạch để thử tải.",
+], 0.62, 5.58, 5.8, 1.2, size=10.5, gap=7)
 add_bullets(slide, [
     "Số sự kiện ≠ số bài: dùng COUNT(DISTINCT id).",
     "MSCK REPAIR sau khi Spark ghi partition mới.",
-    "8/8 mẫu chạy đúng sau khi sửa mẫu 2.",
-], 8.9, 3.68, 3.95, 1.6, size=10.5, gap=8)
-card(slide, 8.9, 4.95, 3.95, 1.25)
-add_text(slide, "Vì sao dùng Hive?", 9.1, 5.08, 3.55, 0.28, size=11, bold=True, color=BLUE)
-add_text(slide, "Truy vấn SQL trực tiếp trên Parquet ở HDFS, không nạp lại dữ liệu; dashboard chỉ cần HiveServer2.",
-         9.1, 5.38, 3.55, 1.0, size=10.5, color=MUTED)
+    "8/8 mẫu chạy đúng; kết quả xuất được CSV.",
+], 7.05, 5.58, 5.7, 1.2, size=10.5, gap=7)
 
 # ---------------------------------------------------------------------------
-# 12 - Kết quả tổng quan
+# 11 - Kết quả tổng quan
 # ---------------------------------------------------------------------------
-slide = new_slide(12)
+slide = new_slide(11)
 header(slide, "Kết quả tổng quan", f"Lần chạy {analysis['clean_run_id'][:8]} · Spark {analysis.get('spark_version')}")
 kpi(slide, 0.6, 1.82, 2.95, 1.4, vn_int(rows), "bài báo sạch")
 kpi(slide, 3.66, 1.82, 2.95, 1.4, f"{min_year}–{max_year}", "khoảng năm nộp (v1)", color=NAVY)
 kpi(slide, 6.72, 1.82, 2.95, 1.4, str(groups), "nhóm ngành", color=GREEN)
-kpi(slide, 9.78, 1.82, 2.95, 1.4, vn_float(model.get("test_log_perplexity"), 2),
-    "log-perplexity LDA", color=AMBER)
+kpi(slide, 9.78, 1.82, 2.95, 1.4, f"{vn_float(model_seconds)} giây",
+    "huấn luyện K-Means", color=AMBER)
 add_image(slide, "01_yearly_growth.png", 0.5, 3.4, 7.4, 3.35)
 add_text(slide, "Tăng trưởng 2008–2015", 8.25, 3.45, 4.4, 0.32, size=13, bold=True, color=NAVY)
 add_text(slide, f"Số bài tăng từ {vn_int(growth_start['count'])} lên {vn_int(growth_end['count'])}, "
                 f"tương đương {vn_float(overall_growth)}% hay {vn_float(cagr)}%/năm.",
          8.25, 3.82, 4.45, 1.1, size=12, color=INK)
-add_text(slide, "2016 chỉ có 12.153 bài vì phạm vi trích xuất dừng giữa năm — không phải suy giảm của ngành.",
+add_text(slide, "2016 chỉ có 12.153 bài vì shard tải về kết thúc ngày 12/02/2016, tức khoảng 1,4 tháng dữ liệu — "
+                "không phải suy giảm của ngành.",
          8.25, 5.0, 4.45, 1.1, size=10.5, color=MUTED)
-add_text(slide, "2007 thấp vì dữ liệu bắt đầu từ tháng 4.", 8.25, 5.95, 4.45, 0.4, size=10.5, color=MUTED)
+add_text(slide, "2007 thấp vì dữ liệu bắt đầu từ tháng 4.", 8.25, 6.1, 4.45, 0.4, size=10.5, color=MUTED)
 
 # ---------------------------------------------------------------------------
-# 13 - Cơ cấu ngành
+# 12 - Cơ cấu ngành + chuyên ngành (gộp)
+# ---------------------------------------------------------------------------
+slide = new_slide(12)
+header(slide, "Cơ cấu ngành và chuyên ngành",
+       "Vật lý, toán, khoa học máy tính chiếm 96,6%; ba chuyên ngành đầu đều thuộc vật lý")
+add_image(slide, "07_field_distribution.png", 0.5, 1.8, 5.6, 4.3)
+add_image(slide, "03_top_categories.png", 6.35, 1.8, 6.3, 4.3)
+add_text(slide, f"Vật lý {vn_int(top_group['papers'])} bài ({vn_float(top_group['papers'] / rows * 100)}%), "
+                f"trung bình {vn_float(top_group['avg_authors'], 2)} tác giả/bài; toán chỉ 1,92.",
+         0.62, 6.22, 5.7, 0.6, size=10.5, color=MUTED)
+top3 = cat_totals.head(3)
+add_text(slide, " · ".join(f"{name} {vn_int(value)}" for name, value in top3.items())
+                + " — đều là chuyên ngành vật lý.",
+         6.45, 6.18, 6.2, 0.32, size=10.5, color=MUTED)
+add_text(slide, "hep-ph: hiện tượng luận · quant-ph: lượng tử · hep-th: lý thuyết.",
+         6.45, 6.5, 6.2, 0.32, size=10.5, color=MUTED)
+
+# ---------------------------------------------------------------------------
+# 13 - Từ khóa + hồi quy tuyến tính (gộp)
 # ---------------------------------------------------------------------------
 slide = new_slide(13)
-header(slide, "Cơ cấu tám nhóm ngành", "Vật lý, toán và khoa học máy tính chiếm 96,6% dữ liệu")
-add_image(slide, "07_field_distribution.png", 0.5, 1.82, 5.4, 4.85)
-table(slide, ["Nhóm", "Số bài", "Tỷ lệ", "Tác giả/bài"], [
-    [row.main_group, vn_int(row.papers), vn_float(row.papers / rows * 100) + "%",
-     vn_float(row.avg_authors, 2)]
-    for row in field_metrics.head(6).itertuples()
-], 6.25, 1.9, 6.4, 3.4, size=11.5, col_widths=[0.9, 1.0, 0.8, 1.0])
-add_text(slide, f"Vật lý: {vn_int(top_group['papers'])} bài ({vn_float(top_group['papers'] / rows * 100)}%), "
-                f"trung bình {vn_float(top_group['avg_authors'], 2)} tác giả/bài.",
-         6.25, 5.5, 6.4, 0.4, size=11.5, bold=True, color=BLUE)
-add_text(slide, "Toán chỉ 1,92 tác giả/bài — phản ánh khác biệt giữa nghiên cứu lý thuyết và thực nghiệm.",
-         6.25, 5.95, 6.4, 0.6, size=10.5, color=MUTED)
-
-# ---------------------------------------------------------------------------
-# 14 - Chuyên ngành
-# ---------------------------------------------------------------------------
-slide = new_slide(14)
-header(slide, "Chuyên ngành hàng đầu", "Xếp hạng theo tổng số bài trong phạm vi đã tải")
-add_image(slide, "03_top_categories.png", 0.5, 1.82, 7.6, 4.9)
-add_text(slide, "Top 6 chuyên ngành", 8.4, 1.86, 4.3, 0.3, size=12.5, bold=True, color=NAVY)
-add_bullets(slide, [f"{name}: {vn_int(value)} bài" for name, value in cat_totals.head(6).items()],
-            8.4, 2.24, 4.35, 2.8, size=12, gap=10)
-add_text(slide, "Ba chuyên ngành dẫn đầu đều thuộc vật lý: hạt nhân, lượng tử và lý thuyết.",
-         8.4, 5.3, 4.35, 0.8, size=10.5, color=MUTED)
-add_text(slide, "Bảng gốc xếp hạng lại theo từng năm; biểu đồ tổng hợp toàn giai đoạn.",
-         8.4, 6.05, 4.35, 0.7, size=10.5, color=MUTED)
-
-# ---------------------------------------------------------------------------
-# 15 - Từ khóa
-# ---------------------------------------------------------------------------
-slide = new_slide(15)
-header(slide, "Xu hướng từ khóa công nghệ", "Chuẩn hóa trên 1.000 bài mỗi năm để so sánh được giữa các năm")
-add_image(slide, "05_keyword_trends.png", 0.5, 1.82, 7.9, 4.9)
-add_text(slide, "Năm 2015", 8.65, 1.86, 4.1, 0.3, size=12.5, bold=True, color=NAVY)
+header(slide, "Từ khóa công nghệ và xu hướng theo năm",
+       "Chuẩn hóa trên 1.000 bài/năm; chỉ dự báo khi đường thẳng khớp tốt (R² ≥ 0,5)")
+add_image(slide, "05_keyword_trends.png", 0.5, 1.8, 7.3, 4.45)
+add_text(slide, "Năm 2015 — bài trên 1.000 bài", 8.0, 1.86, 4.7, 0.3, size=11.5, bold=True, color=NAVY)
 kw_rows = []
-for word in ("quantum", "graph", "diffusion", "neural", "attention", "transformer"):
+for word in ("quantum", "graph", "deep", "diffusion", "neural", "attention", "transformer"):
     match = keywords[(keywords.year == 2015) & (keywords.word == word)]
     if not match.empty:
         item = match.iloc[0]
         kw_rows.append([word, vn_int(item.document_count), vn_float(item.papers_per_1000, 2)])
-table(slide, ["Từ khóa", "Số bài", "/1.000 bài"], kw_rows, 8.65, 2.24, 4.05, 2.35, size=10.5,
+table(slide, ["Từ khóa", "Số bài", "/1.000 bài"], kw_rows, 8.0, 2.16, 4.7, 2.2, size=10,
       col_widths=[1.1, 0.8, 0.9])
-add_text(slide, "transformer chỉ 0,27 vì năm 2015 bài về kiến trúc này còn rất ít — đúng thời điểm lịch sử.",
-         8.65, 4.75, 4.05, 0.9, size=10.5, color=MUTED)
-add_text(slide, "Danh sách 16 từ khóa là cố định, chưa phát hiện cụm từ mới ngoài danh sách.",
-         8.65, 5.75, 4.05, 0.8, size=10.5, color=MUTED)
+add_text(slide, "Hồi quy tuyến tính 2008–2015", 8.0, 4.47, 4.7, 0.3, size=11.5, bold=True, color=NAVY)
+table(slide, ["Từ khóa", "R²", "MAE", "Kết luận"],
+      [[item.get("word", "—"), vn_float(item.get("r2"), 2), vn_float(item.get("mae"), 2),
+        "Dự báo" if item.get("status") == "ok" else "Chỉ mô tả"]
+       for item in sorted(forecast.get("metrics", []), key=lambda item: -float(item.get("r2", 0)))],
+      8.0, 4.78, 4.7, 1.48, size=10, col_widths=[1.1, 0.7, 0.7, 1.0])
+add_text(slide, f"{len(publishable)}/{len(forecast.get('metrics', []))} từ khóa có R² ≥ 0,5 nên được dự báo tiếp cho 2017–2019; "
+                "transformer tăng không đều nên chỉ mô tả.",
+         8.0, 6.32, 4.7, 0.6, size=9.5, color=MUTED)
+add_text(slide, "transformer 0,27: đây không phải kiến trúc Transformer (công bố 2017) mà là nghĩa khác của từ.",
+         0.62, 6.38, 7.1, 0.45, size=10, color=MUTED)
 
 # ---------------------------------------------------------------------------
-# 16 - Tác giả
+# 14 - Tác giả + K-Means (gộp)
 # ---------------------------------------------------------------------------
-slide = new_slide(16)
-header(slide, "Tác giả và hợp tác", "Thống kê theo chuỗi tên trong trường authors")
-add_image(slide, "08_author_collaboration_trend.png", 0.5, 1.82, 6.0, 4.85)
-table(slide, ["Tác giả", "Số bài"], [[row.author[:30], vn_int(row.count)]
-                                     for row in top_authors.head(8).itertuples()],
-      6.85, 1.9, 5.8, 3.2, size=11, col_widths=[2.4, 0.8])
-add_text(slide, "CMS/ATLAS Collaboration xuất hiện như một “tác giả” vì dữ liệu ghi tên nhóm.",
-         6.85, 5.3, 5.8, 0.7, size=10.5, color=MUTED)
-add_text(slide, "Chưa phân giải thực thể nên các tên phổ biến có thể bị cộng gộp — đây là hạn chế đã nêu.",
-         6.85, 5.95, 5.8, 0.7, size=10.5, color=MUTED)
+slide = new_slide(14)
+header(slide, "Tác giả và nhóm bài báo tương tự (K-Means)",
+       f"{model.get('k', '—')} cụm · {vn_int(model.get('vocabulary_size', 0))} từ · "
+       "mỗi bài xếp vào cụm có từ khóa gần nhất")
+add_image(slide, "08_author_collaboration_trend.png", 0.5, 1.8, 6.1, 4.0)
+add_image(slide, "12_kmeans_clusters.png", 6.75, 1.8, 6.0, 4.0)
+add_text(slide, "Top tác giả: " + " · ".join(f"{row.author} {vn_int(row.count)}"
+                                             for row in top_authors.head(4).itertuples()),
+         0.62, 5.95, 6.1, 0.35, size=10, color=MUTED)
+add_text(slide, "CMS/ATLAS là tên nhóm; chưa phân giải thực thể nên các tên phổ biến có thể bị cộng gộp.",
+         0.62, 6.32, 6.1, 0.5, size=9.5, color=MUTED)
+add_text(slide, "Cụm: " + " · ".join(f"C{item['cluster']} {', '.join(item['terms'][:2])}"
+                                     for item in sorted(clusters, key=lambda c: -float(c.get("share", 0)))[:4]),
+         6.85, 5.95, 6.0, 0.5, size=10, color=MUTED)
+add_text(slide, f"Huấn luyện {vn_int(model.get('train_documents', 0))} bài, giữ riêng "
+                f"{vn_int(model.get('test_documents', 0))} bài, chia tất định theo id; "
+                "vector TF-IDF chuẩn hóa độ dài trước khi gom cụm.",
+         6.85, 6.38, 6.0, 0.5, size=9.5, color=MUTED)
 
 # ---------------------------------------------------------------------------
-# 17 - LDA
+# 15 - Bảy lỗi logic + kiểm chứng end-to-end (gộp)
 # ---------------------------------------------------------------------------
-slide = new_slide(17)
-header(slide, "Mô hình chủ đề LDA", f"{model.get('k', '—')} chủ đề · {vn_int(model.get('vocabulary_size', 0))} từ · "
-                                    f"log-perplexity {vn_float(model.get('test_log_perplexity'), 3)}")
-add_image(slide, "12_lda_topic_bubble.png", 0.5, 1.82, 7.5, 4.9)
-add_text(slide, "Chủ đề tiêu biểu", 8.3, 1.86, 4.3, 0.3, size=12.5, bold=True, color=NAVY)
-topic_items = [f"T{item['topic']}: {', '.join(item['terms'][:3])}" for item in topics[:6]]
-add_bullets(slide, topic_items, 8.3, 2.24, 4.4, 2.9, size=11, gap=8)
-add_text(slide, f"Huấn luyện {vn_int(model.get('train_documents', 0))} bài, kiểm định "
-                f"{vn_int(model.get('test_documents', 0))} bài, chia tất định theo id.",
-         8.3, 5.35, 4.4, 0.8, size=10.5, color=MUTED)
-add_text(slide, "Hai chủ đề lớn nhất là phương pháp luận chung — mô hình chưa tách hết ngôn ngữ học thuật.",
-         8.3, 6.1, 4.4, 0.7, size=10.5, color=MUTED)
-
-# ---------------------------------------------------------------------------
-# 18 - Kiểm định ngoại suy
-# ---------------------------------------------------------------------------
-slide = new_slide(18)
-header(slide, "Kiểm định ngoại suy xu hướng", "Chỉ công bố dự báo khi vượt baseline holdout 2013–2015")
-add_image(slide, "10_validated_trend.png", 0.5, 1.82, 7.4, 4.9)
-add_text(slide, "Kết quả holdout", 8.2, 1.86, 4.4, 0.3, size=12.5, bold=True, color=NAVY)
-table(slide, ["Từ khóa", "MAE", "Baseline", "Kết luận"],
-      [[item.get("word", "—"), vn_float(item.get("mae"), 3), vn_float(item.get("baseline_mae"), 3),
-        "Đạt" if item.get("status") == "accepted" else "Không"] for item in forecast.get("metrics", [])],
-      8.2, 2.24, 4.5, 2.25, size=10.5, col_widths=[1.1, 0.8, 0.9, 0.8])
-add_text(slide, "Cả 4 từ khóa đều vượt baseline; mức cải thiện lớn nhất ở quantum và attention.",
-         8.2, 4.65, 4.5, 0.7, size=10.5, bold=True, color=GREEN)
-add_text(slide, "Huấn luyện đến hết 2012, dự báo 2013–2015, so MAE với “giữ nguyên giá trị năm cuối”.",
-         8.2, 5.5, 4.5, 1.0, size=10, color=MUTED)
-
-# ---------------------------------------------------------------------------
-# 19 - 7 lỗi logic
-# ---------------------------------------------------------------------------
-slide = new_slide(19)
-header(slide, "Bảy lỗi logic phát hiện khi kiểm thử", "Chỉ lộ ra khi chạy thật, không thấy được khi đọc mã một lần")
+slide = new_slide(15)
+header(slide, "Bảy lỗi logic và kiểm chứng end-to-end",
+       "Lỗi chỉ lộ khi chạy thật; sau khi sửa, toàn bộ hệ thống chạy lại từ đầu")
 table(slide, ["#", "Lỗi", "Hệ quả", "Cách sửa"], [
     ["1", "all không chạy sync-hdfs", "HDFS/Hive giữ dữ liệu cũ", "Thêm \"all\" vào điều kiện"],
     ["2", "Consumer dùng raise_error", "Crash-loop ở đúng bản ghi lỗi", "Chuyển sang foreachBatch"],
@@ -773,44 +735,27 @@ table(slide, ["#", "Lỗi", "Hệ quả", "Cách sửa"], [
     ["5", "Mẫu 2 dùng scalar subquery", "Hive 2.3.2 báo lỗi", "SUM(...) OVER ()"],
     ["6", "Insight 2016 “năm chưa kết thúc”", "Giải thích sai bản chất", "Nêu phạm vi dữ liệu"],
     ["7", "Form mất chuyên ngành phụ", "Gửi bài thiếu ngành", "Giữ nguyên danh sách"],
-], 0.6, 1.85, 12.1, 4.05, size=10.5, col_widths=[0.3, 2.4, 3.0, 2.6])
-add_text(slide, "Sau khi sửa, toàn bộ hệ thống được chạy lại end-to-end: dữ liệu, Hive, streaming, dashboard và báo cáo.",
-         0.6, 6.15, 12.1, 0.4, size=11.5, bold=True, color=GREEN)
-add_text(slide, "Giao diện điều hướng cũng được làm lại: một thanh segmented liền khối thay cho các nút nổi rời rạc.",
-         0.6, 6.55, 12.1, 0.4, size=10.5, color=MUTED)
+], 0.6, 1.82, 12.1, 3.45, size=10, col_widths=[0.3, 2.4, 3.0, 2.6])
+kpi(slide, 0.6, 5.45, 2.95, 1.45, "704.329", "dòng batch", color=BLUE, note="10 partition + _SUCCESS")
+kpi(slide, 3.66, 5.45, 2.95, 1.45, f"{STREAM_EVENTS} / {STREAM_PAPERS}", "sự kiện / bài duy nhất",
+    color=GREEN, note="COUNT(DISTINCT id)")
+kpi(slide, 6.72, 5.45, 2.95, 1.45, "8/8", "mẫu Hive SQL đúng", color=NAVY, note="không lỗi SQL")
+kpi(slide, 9.78, 5.45, 2.95, 1.45, "5/5", "tab dashboard", color=AMBER, note="0 lỗi console")
 
 # ---------------------------------------------------------------------------
-# 20 - Kiểm chứng end-to-end
+# 16 - Hạn chế và hướng phát triển
 # ---------------------------------------------------------------------------
-slide = new_slide(20)
-header(slide, "Kiểm chứng end-to-end", "Mọi hạng mục đều đạt trên môi trường Docker thật")
-table(slide, ["Hạng mục", "Cách kiểm chứng", "Kết quả"], [
-    ["Dữ liệu batch", "Đọc manifest + đếm lại bằng Spark", "704.329 dòng, 2007–2016, 8 nhóm"],
-    ["Partition HDFS", "Duyệt /data/arxiv_clean_v2", "Đủ 10 partition + _SUCCESS"],
-    ["Hive lịch sử", "SELECT COUNT(*) FROM arxiv_historical", "704.329"],
-    ["Hive streaming", "COUNT(*) và COUNT(DISTINCT id)", "57 sự kiện / 34 bài"],
-    ["Tám mẫu truy vấn", "Chạy trên dashboard", "8/8 đúng, không lỗi SQL"],
-    ["Bản ghi hợp lệ", "Producer 2401.96928", "Vào arxiv_stream"],
-    ["Bản ghi lỗi", "Kafka 2401.99999", "Vào rejects: missing_required_field"],
-    ["Năm tab + URL", "Bấm tab, deep link, nút Back", "URL ?tab= đúng, 5/5 tab, 0 lỗi console"],
-], 0.6, 1.85, 12.1, 4.15, size=10.5, col_widths=[1.5, 3.4, 3.4])
-add_text(slide, "Không có hạng mục nào được đánh dấu đạt bằng cách bỏ qua kiểm thử.",
-         0.6, 6.25, 12.1, 0.4, size=11.5, bold=True, color=GREEN)
-
-# ---------------------------------------------------------------------------
-# 21 - Hạn chế và hướng phát triển
-# ---------------------------------------------------------------------------
-slide = new_slide(21)
+slide = new_slide(16)
 header(slide, "Hạn chế và hướng phát triển", "Điều gì chưa làm được và sẽ làm tiếp")
 add_text(slide, "Hạn chế", 0.62, 1.86, 5.8, 0.34, size=15, bold=True, color=RED)
 add_bullets(slide, [
     f"Chỉ {len(shards)} shard đầu tiên, không đại diện toàn bộ arXiv.",
     "Tên tác giả chưa phân giải thực thể.",
     "Từ khóa theo danh sách 16 từ cố định.",
-    "LDA huấn luyện trên mẫu 200.181 bài.",
-    "Đo trên một máy 12 container, chưa phải cụm thật.",
+    "K-Means huấn luyện trên mẫu 200.181 bài.",
+    "Đo trên một máy 11 container mặc định, chưa phải cụm thật.",
     f"Streaming mới có {STREAM_EVENTS} sự kiện, chưa thử tải cao.",
-], 0.62, 2.26, 5.9, 4.0, size=11.5, gap=9)
+], 0.62, 2.26, 5.9, 2.2, size=11, gap=7)
 add_text(slide, "Hướng phát triển", 6.9, 1.86, 5.8, 0.34, size=15, bold=True, color=GREEN)
 add_bullets(slide, [
     "Mở rộng số shard, chạy trên cụm nhiều máy.",
@@ -819,50 +764,36 @@ add_bullets(slide, [
     "Job streaming thứ hai cho chỉ số theo cửa sổ.",
     "Kiểm thử tự động + CI trước khi cập nhật.",
     "Đóng gói một lệnh, có cảnh báo khi consumer dừng.",
-], 6.9, 2.26, 5.9, 2.0, size=11.5, gap=9)
-add_text(slide, "Ba ưu tiên tiếp theo", 0.62, 4.5, 12.1, 0.3, size=10.5, bold=True, color=BLUE)
-step_card(slide, 0.6, 4.78, 3.95, 1.45, 1, "Mở rộng dữ liệu",
+], 6.9, 2.26, 5.9, 2.2, size=11, gap=7)
+add_text(slide, "Ba ưu tiên tiếp theo", 0.62, 4.55, 12.1, 0.3, size=10.5, bold=True, color=BLUE)
+step_card(slide, 0.6, 4.85, 3.95, 1.45, 1, "Mở rộng dữ liệu",
           "Tải toàn bộ arXiv và chạy trên cụm nhiều máy để đo hiệu năng thật.")
-step_card(slide, 4.69, 4.78, 3.95, 1.45, 2, "Nâng chất lượng phân tích",
-          "Phân giải tác giả, phát hiện cụm từ mới, thêm mô hình chủ đề.")
-step_card(slide, 8.78, 4.78, 3.95, 1.45, 3, "Vận hành ổn định",
+step_card(slide, 4.69, 4.85, 3.95, 1.45, 2, "Nâng chất lượng phân tích",
+          "Phân giải tác giả, phát hiện cụm từ mới, thử thêm cách phân nhóm.")
+step_card(slide, 8.78, 4.85, 3.95, 1.45, 3, "Vận hành ổn định",
           "CI tự động, cảnh báo khi consumer dừng, đóng gói một lệnh.")
 add_text(slide, "Ba ưu tiên này là đề xuất cho phiên bản tiếp theo, không nằm trong phạm vi bài làm hiện tại.",
-         0.62, 6.45, 12.1, 0.34, size=10.5, color=MUTED)
+         0.62, 6.5, 12.1, 0.34, size=10.5, color=MUTED)
 
 # ---------------------------------------------------------------------------
-# 22 - Kết luận
+# 17 - Kết luận và cảm ơn (gộp)
 # ---------------------------------------------------------------------------
-slide = new_slide(22)
-card(slide, 0.7, 1.35, 11.9, 4.6, fill=PANEL)
-add_text(slide, "KẾT LUẬN", 0.9, 1.6, 11.5, 0.6, size=30, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+slide = new_slide(17)
+card(slide, 0.7, 1.15, 11.9, 4.15, fill=PANEL)
+add_text(slide, "KẾT LUẬN", 0.9, 1.35, 11.5, 0.6, size=29, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
 add_text(slide, f"Hệ thống xử lý {vn_int(rows)} bài báo từ {pretty_bytes(total_bytes)} dữ liệu thô, sinh 9 bảng phân tích,\n"
-                "12 biểu đồ và mô hình 10 chủ đề; phát hiện và sửa 7 lỗi logic;\n"
+                "12 biểu đồ và mô hình 10 cụm; phát hiện và sửa 7 lỗi logic;\n"
                 "kiểm chứng end-to-end cả nhánh batch lẫn nhánh streaming.",
-         1.1, 2.35, 11.1, 1.7, size=17, color=INK, align=PP_ALIGN.CENTER, spacing=1.35)
-add_text(slide, "Kafka  →  Spark  →  HDFS  →  Hive  →  Streamlit", 1.1, 4.3, 11.1, 0.45,
+         1.1, 2.05, 11.1, 1.5, size=16.5, color=INK, align=PP_ALIGN.CENTER, spacing=1.3)
+add_text(slide, "Kafka  →  Spark  →  HDFS  →  Hive  →  Streamlit", 1.1, 3.72, 11.1, 0.45,
          size=16, bold=True, color=BLUE, align=PP_ALIGN.CENTER)
-add_text(slide, "Cảm ơn thầy cô và các bạn đã lắng nghe", 1.1, 5.05, 11.1, 0.5, size=14,
+add_text(slide, "Cảm ơn thầy cô và các bạn đã lắng nghe", 1.1, 4.42, 11.1, 0.5, size=14,
          color=MUTED, align=PP_ALIGN.CENTER)
-
-# ---------------------------------------------------------------------------
-# 23 - Q&A / thông tin
-# ---------------------------------------------------------------------------
-slide = new_slide(23, footer=False)
-add_logo(slide, left=4.9, top=1.2, width=3.5)
-add_text(slide, "PHÂN TÍCH DỮ LIỆU LỚN METADATA BÀI BÁO KHOA HỌC ARXIV", 0.7, 2.35, 11.9, 0.6,
-         size=25, bold=True, color=INK, align=PP_ALIGN.CENTER)
-add_text(slide, "Hadoop  ·  Spark  ·  Kafka  ·  Hive  ·  Streamlit", 0.7, 3.05, 11.9, 0.4,
-         size=15, color=BLUE, align=PP_ALIGN.CENTER)
-line = slide.shapes.add_connector(1, Inches(4.0), Inches(3.7), Inches(9.3), Inches(3.7))
-line.line.color.rgb = BORDER
-line.line.width = Pt(1)
-line.shadow.inherit = False
-add_text(slide, f"{STUDENT}  ·  {STUDENT_ID}  ·  Lớp {CLASS_ID}", 0.7, 3.95, 11.9, 0.4,
-         size=15, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
-add_text(slide, f"Giảng viên hướng dẫn: {ADVISOR}", 0.7, 4.4, 11.9, 0.4, size=12.5,
+add_text(slide, f"{STUDENT}  ·  {STUDENT_ID}  ·  Lớp {CLASS_ID}", 0.7, 5.6, 11.9, 0.4,
+         size=14, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+add_text(slide, f"Giảng viên hướng dẫn: {ADVISOR}", 0.7, 6.02, 11.9, 0.4, size=11.5,
          color=MUTED, align=PP_ALIGN.CENTER)
-add_text(slide, "Hưng Yên, tháng 11 năm 2026", 0.7, 4.85, 11.9, 0.4, size=12, color=MUTED,
+add_text(slide, "Hưng Yên, tháng 11 năm 2026", 0.7, 6.4, 11.9, 0.4, size=11, color=MUTED,
          align=PP_ALIGN.CENTER)
 
 # ---------------------------------------------------------------------------

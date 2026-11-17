@@ -1,58 +1,91 @@
 {
   "clean_run_id": "492bef9d-74a6-4f51-9298-a46f7b35b300",
   "scope": "downloaded_subset_only",
-  "method": "linear_trend_three_year_holdout_vs_last_value",
+  "method": "ordinary_least_squares_linear_regression",
+  "quality_rule": "publish_when_r2_at_least_0.5",
   "metrics": [
     {
       "word": "transformer",
-      "status": "accepted",
-      "train_end_year": 2012,
+      "status": "weak_fit",
+      "slope": 0.01854534436393384,
+      "intercept": -37.16576403419241,
+      "r2": 0.4330493262123598,
+      "mae": 0.06943601374659161,
+      "train_years": [
+        2008,
+        2009,
+        2010,
+        2011,
+        2012
+      ],
       "test_years": [
         2013,
         2014,
         2015
       ],
-      "mae": 0.06943601374659161,
-      "baseline_mae": 0.09145344310011004,
       "unit": "papers_per_1000"
     },
     {
       "word": "attention",
-      "status": "accepted",
-      "train_end_year": 2012,
+      "status": "ok",
+      "slope": 0.6129197357715309,
+      "intercept": -1221.5266264068403,
+      "r2": 0.8974988935459252,
+      "mae": 0.4179784595100878,
+      "train_years": [
+        2008,
+        2009,
+        2010,
+        2011,
+        2012
+      ],
       "test_years": [
         2013,
         2014,
         2015
       ],
-      "mae": 0.4179784595100878,
-      "baseline_mae": 1.8772530821233506,
       "unit": "papers_per_1000"
     },
     {
       "word": "diffusion",
-      "status": "accepted",
-      "train_end_year": 2012,
+      "status": "ok",
+      "slope": 0.3736197037277763,
+      "intercept": -735.2689192732563,
+      "r2": 0.8464203103242389,
+      "mae": 0.23666977212278675,
+      "train_years": [
+        2008,
+        2009,
+        2010,
+        2011,
+        2012
+      ],
       "test_years": [
         2013,
         2014,
         2015
       ],
-      "mae": 0.23666977212278675,
-      "baseline_mae": 0.9098637951217619,
       "unit": "papers_per_1000"
     },
     {
       "word": "quantum",
-      "status": "accepted",
-      "train_end_year": 2012,
+      "status": "ok",
+      "slope": -1.9430652389011047,
+      "intercept": 4012.907307231483,
+      "r2": 0.9771711155081736,
+      "mae": 0.8125510104915984,
+      "train_years": [
+        2008,
+        2009,
+        2010,
+        2011,
+        2012
+      ],
       "test_years": [
         2013,
         2014,
         2015
       ],
-      "mae": 0.8125510104915984,
-      "baseline_mae": 4.02888911788131,
       "unit": "papers_per_1000"
     }
   ]

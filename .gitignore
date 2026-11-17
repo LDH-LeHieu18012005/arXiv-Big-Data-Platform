@@ -35,5 +35,7 @@ data/arxiv_data.parquet/
 
 # Large MLlib model artifacts
 output/analysis_results/idf_model/
+output/analysis_results/kmeans_model/
 output/analysis_results/lda_model/
+output/analysis_results/normalizer_model/
 output/analysis_results/vocabulary_model/

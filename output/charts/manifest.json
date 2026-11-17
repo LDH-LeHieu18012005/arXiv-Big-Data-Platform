@@ -11,9 +11,9 @@
     "07_field_distribution.png",
     "08_author_collaboration_trend.png",
     "09_top_authors.png",
-    "10_validated_trend.png",
+    "10_linear_regression_trend.png",
     "11_field_radar_comparison.png",
-    "12_lda_topic_bubble.png"
+    "12_kmeans_clusters.png"
   ],
   "years": [
     2007,

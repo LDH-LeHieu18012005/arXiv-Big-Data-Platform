@@ -2,21 +2,6 @@
   "clean_run_id": "492bef9d-74a6-4f51-9298-a46f7b35b300",
   "predictions": [
     {
-      "word": "transformer",
-      "year": 2017,
-      "papers_per_1000": 0.24019554786215302
-    },
-    {
-      "word": "transformer",
-      "year": 2018,
-      "papers_per_1000": 0.25874089222608687
-    },
-    {
-      "word": "transformer",
-      "year": 2019,
-      "papers_per_1000": 0.2772862365900207
-    },
-    {
       "word": "attention",
       "year": 2017,
       "papers_per_1000": 14.732480644337475
