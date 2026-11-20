@@ -12,6 +12,10 @@ def create_spark_session(name="ArXiv", kafka=False):
                .config("spark.sql.parquet.outputTimestampType", "INT96")
                .config("spark.driver.memory", os.getenv("SPARK_DRIVER_MEMORY", "4g"))
                .config("spark.executor.memory", os.getenv("SPARK_EXECUTOR_MEMORY", "1500m")))
+    if os.getenv("SPARK_CORES_MAX"):
+        # Cap long-running apps (the streaming consumer) so batch jobs and notebooks on the
+        # same standalone cluster still get an executor instead of waiting forever.
+        builder = builder.config("spark.cores.max", os.environ["SPARK_CORES_MAX"])
     if os.getenv("SPARK_DRIVER_HOST"):
         builder = builder.config("spark.driver.host", os.environ["SPARK_DRIVER_HOST"]).config("spark.driver.bindAddress", "0.0.0.0")
     if kafka:

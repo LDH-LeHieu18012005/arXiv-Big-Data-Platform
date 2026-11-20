@@ -366,7 +366,7 @@ add_text(slide, "TRƯỜNG ĐẠI HỌC SƯ PHẠM KỸ THUẬT HƯNG YÊN  ·  
          0.62, 1.72, 12.1, 0.3, size=11.5, bold=True, color=MUTED, align=PP_ALIGN.CENTER)
 add_text(slide, "BÀI TẬP LỚN  ·  HỌC PHẦN XỬ LÝ DỮ LIỆU LỚN", 0.62, 2.08, 12.1, 0.34,
          size=13, bold=True, color=BLUE, align=PP_ALIGN.CENTER)
-add_text(slide, "PHÂN TÍCH DỮ LIỆU LỚN METADATA\nBÀI BÁO KHOA HỌC ARXIV", 0.7, 2.55, 11.9, 1.5,
+add_text(slide, "PHÂN TÍCH XU HƯỚNG NGHIÊN CỨU KHOA HỌC\nQUY MÔ LỚN TRÊN DỮ LIỆU ARXIV", 0.7, 2.55, 11.9, 1.5,
          size=37, bold=True, color=INK, align=PP_ALIGN.CENTER, spacing=1.08)
 add_text(slide, "Trên nền tảng Hadoop, Spark, Kafka và Hive", 0.7, 4.02, 11.9, 0.4, size=17,
          color=NAVY, align=PP_ALIGN.CENTER)
@@ -799,7 +799,7 @@ add_text(slide, "Hưng Yên, tháng 11 năm 2026", 0.7, 6.4, 11.9, 0.4, size=11,
 # ---------------------------------------------------------------------------
 # Lưu
 # ---------------------------------------------------------------------------
-prs.core_properties.title = "Phân tích dữ liệu lớn metadata bài báo khoa học arXiv"
+prs.core_properties.title = "Phân tích xu hướng nghiên cứu khoa học quy mô lớn trên dữ liệu arXiv"
 prs.core_properties.author = STUDENT
 prs.core_properties.subject = "Bài tập lớn Xử lý dữ liệu lớn"
 

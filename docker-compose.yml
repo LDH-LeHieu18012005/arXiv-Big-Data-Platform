@@ -246,6 +246,9 @@ services:
     environment:
       - SPARK_MASTER=spark://spark-master:7077
       - SPARK_DRIVER_HOST=streaming-consumer
+      # Worker có 2 core/2 GB: consumer chỉ giữ 1 core + 512 MB để notebook/batch vẫn chạy được song song.
+      - SPARK_CORES_MAX=1
+      - SPARK_EXECUTOR_MEMORY=512m
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - KAFKA_TOPIC=arxiv-papers-v2
     depends_on:

@@ -805,7 +805,7 @@ if show_architecture:
         <span class="section-num">ARCH</span>
         <div>
             <h2>Kiến trúc &amp; luồng dữ liệu</h2>
-            <p>Năm tầng, chạy trong 12 container Docker trên cùng một máy.</p>
+            <p>Năm thành phần chính, chạy trong 12 container Docker trên cùng một máy (11 mặc định + streaming-consumer).</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -825,7 +825,7 @@ if show_architecture:
         <div class="pipe-step">
             <div class="pipe-num">03 · LƯU TRỮ</div>
             <div class="pipe-title">Hadoop HDFS</div>
-            <div class="pipe-desc">Data Lakehouse, phân vùng theo nhóm ngành.</div>
+            <div class="pipe-desc">Data Lakehouse: batch phân vùng theo năm, stream theo nhóm ngành.</div>
         </div>
         <div class="pipe-step">
             <div class="pipe-num">04 · TRUY VẤN</div>
@@ -858,12 +858,12 @@ if show_architecture:
         {"Container": "kafka", "Image": "cp-kafka:7.6.0", "Port": "9092, 29092", "Chức năng": "Hàng đợi thông điệp"},
         {"Container": "spark-master", "Image": "bigdata-spark:latest", "Port": "8080, 7077", "Chức năng": "Điều phối Spark jobs"},
         {"Container": "spark-worker-1", "Image": "bigdata-spark:latest", "Port": "8081", "Chức năng": "Tính toán phân tán (2 cores)"},
-        {"Container": "spark-worker-2", "Image": "bigdata-spark:latest", "Port": "8082", "Chức năng": "Worker tùy chọn (profile full)"},
         {"Container": "spark-jupyter", "Image": "bigdata-spark:latest", "Port": "8888, 4040", "Chức năng": "Notebook thực hành"},
         {"Container": "hive-server", "Image": "hive:2.3.2", "Port": "10000, 10002", "Chức năng": "HiveServer2 - SQL trên HDFS"},
         {"Container": "hive-metastore", "Image": "hive:2.3.2", "Port": "9083", "Chức năng": "Quản lý schema bảng"},
-        {"Container": "hive-metastore-postgresql", "Image": "postgres:9.6", "Port": "5432", "Chức năng": "Lưu metastore"},
+        {"Container": "hive-metastore-postgresql", "Image": "hive-metastore-postgresql:2.3.0 (PostgreSQL 9.5.3)", "Port": "5432", "Chức năng": "Lưu metastore"},
         {"Container": "dashboard", "Image": "python:3.11-slim", "Port": "8501", "Chức năng": "Dashboard Streamlit"},
+        {"Container": "streaming-consumer", "Image": "bigdata-spark:latest", "Port": "—", "Chức năng": "Spark Streaming đọc Kafka (profile streaming)"},
     ]
     with st.expander("Chi tiết 12 container"):
         st.dataframe(pd.DataFrame(containers_data), use_container_width=True, hide_index=True)
